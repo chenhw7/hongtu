@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_badge %}
+
+{% block title %}{{ customer.company_name }} - 鸿图建材获客工具{% endblock %}
+{% block page_title %}客户详情{% endblock %}
+
+{% block content %}
+<!-- 顶部操作栏 -->
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('customers.index') }}" class="btn btn-sm btn-secondary">
+            <i class="bi bi-arrow-left"></i> 返回列表
+        </a>
+        <a href="{{ url_for('customers.edit', id=customer.id) }}" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-pencil"></i> 编辑
+        </a>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <span class="text-muted">当前状态：</span>
+        {{ status_badge(customer.status) }}
+        <select class="form-select form-select-sm" style="width: auto;" id="statusSelect" data-customer-id="{{ customer.id }}">
+            {% for s in status_choices %}
+            <option value="{{ s }}" {% if customer.status == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</div>
+
+<!-- 基本信息 -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white">
+        <h6 class="mb-0"><i class="bi bi-info-circle"></i> 基本信息</h6>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="text-muted small d-block">公司名称</label>
+                <p class="fw-bold mb-0">{{ customer.company_name }}</p>
+            </div>
+            <div class="col-md-4">
+                <label class="text-muted small d-block">联系人</label>
+                <p class="mb-0">{{ customer.contact_person or '-' }}</p>
+            </div>
+            <div class="col-md-4">
+                <label class="text-muted small d-block">电话</label>
+                <p class="mb-0">{{ customer.phone or '-' }}</p>
+            </div>
+            <div class="col-md-4">
+                <label class="text-muted small d-block">行业</label>
+                <p class="mb-0">{{ customer.industry_type or '-' }}</p>
+            </div>
+            <div class="col-md-4">
+                <label class="text-muted small d-block">来源</label>
+                <p class="mb-0">{{ customer.source or '-' }}</p>
+            </div>
+            <div class="col-md-4">
+                <label class="text-muted small d-block">状态</label>
+                <p class="mb-0">{{ status_badge(customer.status) }}</p>
+            </div>
+            <div class="col-12">
+                <label class="text-muted small d-block">地址</label>
+                <p class="mb-0">{{ customer.address or '-' }}</p>
+            </div>
+            <div class="col-12">
+                <label class="text-muted small d-block">备注</label>
+                <p class="mb-0 text-pre-wrap">{{ customer.notes or '-' }}</p>
+            </div>
+            <div class="col-md-6">
+                <label class="text-muted small d-block">创建时间</label>
+                <p class="small text-muted mb-0">{{ customer.created_at.strftime('%Y-%m-%d %H:%M') if customer.created_at else '-' }}</p>
+            </div>
+            <div class="col-md-6">
+                <label class="text-muted small d-block">更新时间</label>
+                <p class="small text-muted mb-0">{{ customer.updated_at.strftime('%Y-%m-%d %H:%M') if customer.updated_at else '-' }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 跟进记录时间线 -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white">
+        <h6 class="mb-0"><i class="bi bi-chat-dots"></i> 跟进记录 ({{ followups|length }})</h6>
+    </div>
+    <div class="card-body">
+        {% if followups %}
+        <div class="timeline">
+            {% for fu in followups %}
+            <div class="timeline-item">
+                <div class="timeline-badge">
+                    <span class="badge bg-secondary">{{ fu.follow_type }}</span>
+                </div>
+                <div class="timeline-content">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="text-muted small">{{ fu.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                    </div>
+                    <p class="mb-1 text-pre-wrap">{{ fu.content }}</p>
+                    {% if fu.next_action %}
+                    <p class="small text-muted mb-0">
+                        <i class="bi bi-arrow-right-circle"></i> 下一步：{{ fu.next_action }}
+                    </p>
+                    {% endif %}
+                    {% if fu.next_date %}
+                    <p class="small mb-0 {% if fu.next_date <= today %}text-danger{% else %}text-warning{% endif %}">
+                        <i class="bi bi-calendar-event"></i> 下次跟进：{{ fu.next_date.strftime('%Y-%m-%d') }}
+                        {% if fu.next_date <= today %}（已到期）{% endif %}
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted text-center py-3 mb-0">
+            <i class="bi bi-inbox" style="font-size: 1.5rem;"></i><br>
+            暂无跟进记录
+        </p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 添加跟进表单 -->
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white">
+        <h6 class="mb-0"><i class="bi bi-plus-circle"></i> 添加跟进记录</h6>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('customers.followup', id=customer.id) }}"
+              class="needs-validation" novalidate>
+            <div class="row g-3">
+                <div class="col-12">
+                    <label class="form-label">跟进内容 <span class="text-danger">*</span></label>
+                    <textarea name="content" class="form-control" rows="3" required
+                              placeholder="请输入本次跟进的内容..."></textarea>
+                    <div class="invalid-feedback">请输入跟进内容</div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">跟进方式</label>
+                    <select name="follow_type" class="form-select">
+                        {% for ft in follow_type_choices %}
+                        <option value="{{ ft }}">{{ ft }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">下一步行动</label>
+                    <input type="text" name="next_action" class="form-control"
+                           placeholder="如下次需准备报价单">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">下次跟进日期</label>
+                    <input type="date" name="next_date" class="form-control">
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg"></i> 添加跟进
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

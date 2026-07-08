@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}{% if customer %}编辑客户{% else %}新增客户{% endif %} - 鸿图建材获客工具{% endblock %}
+{% block page_title %}{% if customer %}编辑客户{% else %}新增客户{% endif %}{% endblock %}
+
+{% block content %}
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+        <form method="POST"
+              action="{% if customer %}{{ url_for('customers.edit', id=customer.id) }}{% else %}{{ url_for('customers.create') }}{% endif %}"
+              class="needs-validation" novalidate>
+            <div class="row g-3">
+                <!-- 公司名称 -->
+                <div class="col-md-6">
+                    <label class="form-label">公司名称 <span class="text-danger">*</span></label>
+                    <input type="text" name="company_name" class="form-control" required
+                           value="{{ customer.company_name if customer else '' }}"
+                           placeholder="请输入公司名称">
+                    <div class="invalid-feedback">请输入公司名称</div>
+                </div>
+                <!-- 联系人 -->
+                <div class="col-md-6">
+                    <label class="form-label">联系人</label>
+                    <input type="text" name="contact_person" class="form-control"
+                           value="{{ customer.contact_person if customer and customer.contact_person else '' }}"
+                           placeholder="请输入联系人姓名">
+                </div>
+                <!-- 电话 -->
+                <div class="col-md-6">
+                    <label class="form-label">电话</label>
+                    <input type="text" name="phone" class="form-control"
+                           value="{{ customer.phone if customer and customer.phone else '' }}"
+                           placeholder="请输入电话号码">
+                </div>
+                <!-- 地址 -->
+                <div class="col-md-6">
+                    <label class="form-label">地址</label>
+                    <input type="text" name="address" class="form-control"
+                           value="{{ customer.address if customer and customer.address else '' }}"
+                           placeholder="请输入公司地址">
+                </div>
+                <!-- 行业类型 -->
+                <div class="col-md-4">
+                    <label class="form-label">行业类型</label>
+                    <select name="industry_type" class="form-select">
+                        <option value="">请选择</option>
+                        {% for i in industry_choices %}
+                        <option value="{{ i }}"
+                                {% if customer and customer.industry_type == i %}selected{% endif %}>{{ i }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <!-- 来源 -->
+                <div class="col-md-4">
+                    <label class="form-label">来源</label>
+                    <select name="source" class="form-select">
+                        <option value="">请选择</option>
+                        {% for s in source_choices %}
+                        <option value="{{ s }}"
+                                {% if customer and customer.source == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <!-- 状态 -->
+                <div class="col-md-4">
+                    <label class="form-label">状态</label>
+                    <select name="status" class="form-select">
+                        {% for s in status_choices %}
+                        <option value="{{ s }}"
+                                {% if customer and customer.status == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <!-- 备注 -->
+                <div class="col-12">
+                    <label class="form-label">备注</label>
+                    <textarea name="notes" class="form-control" rows="3"
+                              placeholder="请输入备注信息">{{ customer.notes if customer and customer.notes else '' }}</textarea>
+                </div>
+
+                <!-- 按钮 -->
+                <div class="col-12">
+                    <hr>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg"></i> 保存
+                    </button>
+                    <a href="{% if customer %}{{ url_for('customers.detail', id=customer.id) }}{% else %}{{ url_for('customers.index') }}{% endif %}"
+                       class="btn btn-secondary">
+                        <i class="bi bi-x-lg"></i> 取消
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

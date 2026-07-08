@@ -1,0 +1,405 @@
+{% extends "base.html" %}
+
+{% block title %}爬虫控制 - 鸿图建材获客工具{% endblock %}
+{% block page_title %}爬虫控制面板{% endblock %}
+
+{% block content %}
+<!-- 统计卡片 -->
+<div class="row mb-4">
+  <div class="col-md-3">
+    <div class="card text-white bg-primary">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-uppercase small">总线索数</div>
+            <div class="fs-3 fw-bold">{{ total_leads }}</div>
+          </div>
+          <i class="bi bi-funnel-fill fs-1 opacity-50"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-white bg-success">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-uppercase small">今日新增</div>
+            <div class="fs-3 fw-bold">{{ today_leads }}</div>
+          </div>
+          <i class="bi bi-calendar-plus-fill fs-1 opacity-50"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-white bg-info">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-uppercase small">已转化客户</div>
+            <div class="fs-3 fw-bold">{{ converted_leads }}</div>
+          </div>
+          <i class="bi bi-arrow-right-circle-fill fs-1 opacity-50"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-white bg-warning">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-uppercase small">采购网(ccgp)</div>
+            <div class="fs-3 fw-bold">{{ ccgp_count }}</div>
+          </div>
+          <i class="bi bi-globe2 fs-1 opacity-50"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 数据源卡片 -->
+<div class="row mb-4">
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="bi bi-globe2"></i> 中国政府采购网 (ccgp)</h6>
+        <span class="badge bg-secondary">共 {{ ccgp_count }} 条</span>
+      </div>
+      <div class="card-body">
+        {% if last_ccgp %}
+        <p class="text-muted small mb-2">
+          上次采集：{{ last_ccgp.finished_at.strftime('%Y-%m-%d %H:%M') if last_ccgp.finished_at else '进行中...' }}
+          {% if last_ccgp.status == '完成' %}
+          <span class="badge bg-success">完成</span>
+          {% elif last_ccgp.status == '失败' %}
+          <span class="badge bg-danger">失败</span>
+          {% elif last_ccgp.status == '运行中' %}
+          <span class="badge bg-warning text-dark">运行中</span>
+          {% endif %}
+          · 新增 {{ last_ccgp.result_count }} 条
+        </p>
+        {% else %}
+        <p class="text-muted small mb-2">尚未执行采集</p>
+        {% endif %}
+        <button class="btn btn-primary btn-sm" id="btn-ccgp" onclick="runScraper('ccgp')">
+          <i class="bi bi-play-fill"></i> 立即采集
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="bi bi-geo-alt"></i> 广东省政府采购网 (gdgpo)</h6>
+        <span class="badge bg-secondary">共 {{ gdgpo_count }} 条</span>
+      </div>
+      <div class="card-body">
+        {% if last_gdgpo %}
+        <p class="text-muted small mb-2">
+          上次采集：{{ last_gdgpo.finished_at.strftime('%Y-%m-%d %H:%M') if last_gdgpo.finished_at else '进行中...' }}
+          {% if last_gdgpo.status == '完成' %}
+          <span class="badge bg-success">完成</span>
+          {% elif last_gdgpo.status == '失败' %}
+          <span class="badge bg-danger">失败</span>
+          {% elif last_gdgpo.status == '运行中' %}
+          <span class="badge bg-warning text-dark">运行中</span>
+          {% endif %}
+          · 新增 {{ last_gdgpo.result_count }} 条
+        </p>
+        {% else %}
+        <p class="text-muted small mb-2">尚未执行采集</p>
+        {% endif %}
+        <button class="btn btn-primary btn-sm" id="btn-gdgpo" onclick="runScraper('gdgpo')">
+          <i class="bi bi-play-fill"></i> 立即采集
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 手动采集配置 -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header">
+    <h6 class="mb-0"><i class="bi bi-gear"></i> 手动采集配置</h6>
+  </div>
+  <div class="card-body">
+    <div class="row align-items-end">
+      <div class="col-md-4">
+        <label class="form-label small">数据源</label>
+        <select class="form-select form-select-sm" id="sel-source">
+          <option value="ccgp">中国政府采购网</option>
+          <option value="gdgpo">广东省采购网</option>
+          <option value="all">全部数据源</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small">最大页数</label>
+        <input type="number" class="form-control form-control-sm" id="inp-pages" value="3" min="1" max="20">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small">关键词（逗号分隔，留空用默认）</label>
+        <input type="text" class="form-control form-control-sm" id="inp-keywords"
+               placeholder="{{ keywords | join(', ') }}" value="">
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-success btn-sm w-100" id="btn-run" onclick="runScraperConfig()">
+          <i class="bi bi-lightning-charge"></i> 开始采集
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 采集任务历史 -->
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h6 class="mb-0"><i class="bi bi-clock-history"></i> 采集任务历史</h6>
+    <button class="btn btn-outline-secondary btn-sm" onclick="refreshTasks()">
+      <i class="bi bi-arrow-clockwise"></i> 刷新
+    </button>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-hover table-sm mb-0">
+      <thead class="table-light">
+        <tr>
+          <th width="60">ID</th>
+          <th width="120">数据源</th>
+          <th width="80">状态</th>
+          <th width="80">数量</th>
+          <th width="160">开始时间</th>
+          <th width="160">结束时间</th>
+          <th width="80">耗时(秒)</th>
+          <th>错误信息</th>
+        </tr>
+      </thead>
+      <tbody id="task-tbody">
+        {% for task in recent_tasks %}
+        <tr id="task-row-{{ task.id }}">
+          <td>{{ task.id }}</td>
+          <td>
+            {% if task.task_type == 'ccgp' %}
+            <span class="badge bg-info text-dark">中国政府采购网</span>
+            {% elif task.task_type == 'gdgpo' %}
+            <span class="badge bg-warning text-dark">广东省采购网</span>
+            {% else %}
+            <span class="badge bg-secondary">{{ task.task_type }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if task.status == '完成' %}
+            <span class="badge bg-success">完成</span>
+            {% elif task.status == '失败' %}
+            <span class="badge bg-danger">失败</span>
+            {% elif task.status == '运行中' %}
+            <span class="badge bg-warning text-dark">
+              <span class="spinner-border spinner-border-sm" role="status"></span> 运行中
+            </span>
+            {% else %}
+            <span class="badge bg-secondary">{{ task.status }}</span>
+            {% endif %}
+          </td>
+          <td>{{ task.result_count }}</td>
+          <td>{{ task.started_at.strftime('%Y-%m-%d %H:%M:%S') if task.started_at else '-' }}</td>
+          <td>{{ task.finished_at.strftime('%Y-%m-%d %H:%M:%S') if task.finished_at else '-' }}</td>
+          <td>
+            {% if task.started_at and task.finished_at %}
+            {{ ((task.finished_at - task.started_at).total_seconds()) | round(1) }}
+            {% elif task.started_at and task.status == '运行中' %}
+            <span class="text-warning">...</span>
+            {% else %}-{% endif %}
+          </td>
+          <td class="text-danger small text-truncate" style="max-width: 300px;" title="{{ task.error_msg or '' }}">
+            {{ task.error_msg[:80] + '...' if task.error_msg and task.error_msg|length > 80 else task.error_msg or '' }}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" class="text-center text-muted py-4">暂无采集任务记录</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 提示信息 -->
+<div id="alert-container" class="mt-3"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// HTML 转义函数，防止 XSS
+function escapeHtml(str) {
+    if (!str) return '';
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+// 触发采集（快捷按钮）
+function runScraper(taskType) {
+  doRun(taskType, null, 3);
+}
+
+// 触发采集（配置表单）
+function runScraperConfig() {
+  var taskType = document.getElementById('sel-source').value;
+  var keywords = document.getElementById('inp-keywords').value.trim();
+  var maxPages = parseInt(document.getElementById('inp-pages').value) || 3;
+  doRun(taskType, keywords, maxPages);
+}
+
+// 执行采集请求
+function doRun(taskType, keywords, maxPages) {
+  var btnId = 'btn-' + taskType;
+  var btn = document.getElementById(btnId) || document.getElementById('btn-run');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 采集中...';
+  }
+
+  var payload = { task_type: taskType, max_pages: maxPages };
+  if (keywords) { payload.keywords = keywords; }
+
+  fetch('{{ url_for("scraper.run") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    showAlert(data.message, data.success ? 'success' : 'danger');
+    if (data.success) {
+      // 开始轮询任务状态
+      setTimeout(refreshTasks, 2000);
+      setTimeout(refreshTasks, 5000);
+      setTimeout(refreshTasks, 10000);
+      setTimeout(refreshTasks, 20000);
+      setTimeout(refreshTasks, 30000);
+      setTimeout(refreshTasks, 60000);
+      setTimeout(refreshTasks, 120000);
+    }
+  })
+  .catch(function(err) {
+    showAlert('请求失败: ' + err, 'danger');
+  })
+  .finally(function() {
+    if (btn) {
+      btn.disabled = false;
+      if (btnId === 'btn-ccgp') {
+        btn.innerHTML = '<i class="bi bi-play-fill"></i> 立即采集';
+      } else if (btnId === 'btn-gdgpo') {
+        btn.innerHTML = '<i class="bi bi-play-fill"></i> 立即采集';
+      } else {
+        btn.innerHTML = '<i class="bi bi-lightning-charge"></i> 开始采集';
+      }
+    }
+  });
+}
+
+// 刷新任务列表
+function refreshTasks() {
+  fetch('{{ url_for("scraper.history") }}?per_page=10')
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (!data.success) return;
+    var tbody = document.getElementById('task-tbody');
+    var html = '';
+    if (data.tasks.length === 0) {
+      html = '<tr><td colspan="8" class="text-center text-muted py-4">暂无采集任务记录</td></tr>';
+    } else {
+      data.tasks.forEach(function(t) {
+        var typeBadge = t.task_type === 'ccgp'
+          ? '<span class="badge bg-info text-dark">中国政府采购网</span>'
+          : t.task_type === 'gdgpo'
+          ? '<span class="badge bg-warning text-dark">广东省采购网</span>'
+          : '<span class="badge bg-secondary">' + escapeHtml(t.task_type) + '</span>';
+
+        var statusBadge = t.status === '完成'
+          ? '<span class="badge bg-success">完成</span>'
+          : t.status === '失败'
+          ? '<span class="badge bg-danger">失败</span>'
+          : t.status === '运行中'
+          ? '<span class="badge bg-warning text-dark"><span class="spinner-border spinner-border-sm"></span> 运行中</span>'
+          : '<span class="badge bg-secondary">' + escapeHtml(t.status) + '</span>';
+
+        var duration = t.duration !== null ? escapeHtml(String(t.duration)) : '-';
+
+        var errorMsg = t.error_msg
+          ? (t.error_msg.length > 80 ? t.error_msg.substring(0, 80) + '...' : t.error_msg)
+          : '';
+        var errorHtml = errorMsg
+          ? '<span class="text-danger small">' + escapeHtml(errorMsg) + '</span>'
+          : '';
+
+        html += '<tr>' +
+          '<td>' + escapeHtml(String(t.id)) + '</td>' +
+          '<td>' + typeBadge + '</td>' +
+          '<td>' + statusBadge + '</td>' +
+          '<td>' + escapeHtml(String(t.result_count)) + '</td>' +
+          '<td>' + escapeHtml(t.started_at || '-') + '</td>' +
+          '<td>' + escapeHtml(t.finished_at || '-') + '</td>' +
+          '<td>' + duration + '</td>' +
+          '<td class="text-truncate" style="max-width:300px">' + errorHtml + '</td>' +
+          '</tr>';
+      });
+    }
+    tbody.innerHTML = html;
+  })
+  .catch(function(err) { console.error('刷新失败:', err); });
+}
+
+// 显示提示（使用 DOM 操作避免 XSS）
+function showAlert(msg, type) {
+  var container = document.getElementById('alert-container');
+  var alertId = 'alert-' + Date.now();
+
+  // 限制 type 只允许已知值
+  var safeType = (type === 'success' || type === 'danger' || type === 'warning' || type === 'info') ? type : 'danger';
+
+  var div = document.createElement('div');
+  div.id = alertId;
+  div.className = 'alert alert-' + safeType + ' alert-dismissible fade show';
+  div.setAttribute('role', 'alert');
+
+  var span = document.createElement('span');
+  span.textContent = msg;
+  div.appendChild(span);
+
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn-close';
+  btn.setAttribute('data-bs-dismiss', 'alert');
+  div.appendChild(btn);
+
+  container.innerHTML = '';
+  container.appendChild(div);
+  setTimeout(function() {
+    var el = document.getElementById(alertId);
+    if (el) el.remove();
+  }, 5000);
+}
+
+// 页面加载时检查运行状态
+window.addEventListener('load', function() {
+  fetch('{{ url_for("scraper.status") }}')
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.success && data.running) {
+      var hasRunning = false;
+      Object.keys(data.running).forEach(function(k) {
+        if (data.running[k]) hasRunning = true;
+      });
+      if (hasRunning) {
+        // 有任务在运行，定期刷新
+        setInterval(refreshTasks, 5000);
+      }
+    }
+  })
+  .catch(function() {});
+});
+</script>
+{% endblock %}

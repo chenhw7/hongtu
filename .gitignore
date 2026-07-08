@@ -1,0 +1,63 @@
+# ====================
+# Python 虚拟环境
+# ====================
+.venv/
+venv/
+env/
+
+# ====================
+# Python 缓存 / 编译文件
+# ====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# ====================
+# 打包 / 分发
+# ====================
+build/
+dist/
+*.egg-info/
+*.egg
+
+# ====================
+# SQLite 数据库文件（Flask instance 目录）
+# ====================
+instance/*.db
+instance/*.db-shm
+instance/*.db-wal
+
+# ====================
+# 测试 / 覆盖率 / 代码分析缓存
+# ====================
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.tox/
+
+# ====================
+# IDE / 编辑器
+# ====================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ====================
+# 操作系统文件
+# ====================
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# ====================
+# 日志 / 环境变量 / 其他
+# ====================
+*.log
+.env
+.python-version
