@@ -62,3 +62,5 @@ ehthumbs.db
 logs/
 .env
 .python-version
+
+instance/

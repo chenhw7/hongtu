@@ -1,19 +1,40 @@
 # -*- coding: utf-8 -*-
 """线索管理路由"""
 import json
+import os
 from datetime import datetime, date
 from io import BytesIO
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file
+from flask import (
+    Blueprint, render_template, request, redirect, url_for, flash, send_file,
+    send_from_directory, abort, current_app,
+)
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 from app.extensions import db
-from app.models import Lead, Customer
+from app.models import Lead, Customer, Attachment
 from app.config import Config
 
 leads = Blueprint('leads', __name__, url_prefix='/leads')
+
+
+def _resolve_instance_file(relative_path):
+    """将存储在DB中的相对路径解析为 instance 目录下的安全绝对路径
+
+    校验解析结果仍位于 instance 目录内，防止路径穿越。
+    返回 (目录, 文件名)，非法或不存在时返回 (None, None)。
+    """
+    if not relative_path:
+        return None, None
+    instance_root = os.path.abspath(current_app.instance_path)
+    full_path = os.path.abspath(os.path.join(instance_root, relative_path))
+    if os.path.commonpath([instance_root, full_path]) != instance_root:
+        return None, None
+    if not os.path.isfile(full_path):
+        return None, None
+    return os.path.split(full_path)
 
 
 def _apply_filters(query):
@@ -23,9 +44,17 @@ def _apply_filters(query):
     q = request.args.get('q', '', type=str).strip()
     date_from = request.args.get('date_from', '', type=str)
     date_to = request.args.get('date_to', '', type=str)
+    announcement_type = request.args.get('announcement_type', '', type=str)
+    region = request.args.get('region', '', type=str)
 
     if source_type:
         query = query.filter(Lead.source_type == source_type)
+
+    if announcement_type:
+        query = query.filter(Lead.announcement_type == announcement_type)
+
+    if region:
+        query = query.filter(Lead.region == region)
 
     if is_converted == '0':
         query = query.filter(Lead.is_converted == False)  # noqa: E712
@@ -68,11 +97,21 @@ def index():
     q = request.args.get('q', '', type=str).strip()
     date_from = request.args.get('date_from', '', type=str)
     date_to = request.args.get('date_to', '', type=str)
+    announcement_type = request.args.get('announcement_type', '', type=str)
+    region = request.args.get('region', '', type=str)
 
     query = _apply_filters(Lead.query)
     query = query.order_by(Lead.publish_date.desc().nullslast(), Lead.created_at.desc())
 
     pagination = query.paginate(page=page, per_page=Config.PER_PAGE, error_out=False)
+
+    # 供筛选下拉框使用的公告类型/地域候选值（去重后按现有数据动态生成）
+    announcement_types = [r[0] for r in db.session.query(Lead.announcement_type)
+                          .filter(Lead.announcement_type.isnot(None), Lead.announcement_type != '')
+                          .distinct().order_by(Lead.announcement_type).all()]
+    regions = [r[0] for r in db.session.query(Lead.region)
+              .filter(Lead.region.isnot(None), Lead.region != '')
+              .distinct().order_by(Lead.region).all()]
 
     # 构建查询参数用于分页链接
     query_args = {}
@@ -86,6 +125,10 @@ def index():
         query_args['date_from'] = date_from
     if date_to:
         query_args['date_to'] = date_to
+    if announcement_type:
+        query_args['announcement_type'] = announcement_type
+    if region:
+        query_args['region'] = region
 
     return render_template('leads/list.html',
                            leads=pagination,
@@ -94,6 +137,10 @@ def index():
                            q=q,
                            date_from=date_from,
                            date_to=date_to,
+                           announcement_type=announcement_type,
+                           region=region,
+                           announcement_types=announcement_types,
+                           regions=regions,
                            query_args=query_args,
                            today=date.today())
 
@@ -116,6 +163,27 @@ def detail(id):
                            lead=lead,
                            raw_data_json=raw_data_json,
                            today=date.today())
+
+
+@leads.route('/<int:id>/snapshot')
+def snapshot(id):
+    """查看详情页HTML快照（本地留档，公告在官网被撤回/修改后仍可查看原文）"""
+    lead = Lead.query.get_or_404(id)
+    directory, filename = _resolve_instance_file(lead.html_snapshot_path)
+    if not directory:
+        abort(404)
+    return send_from_directory(directory, filename)
+
+
+@leads.route('/<int:id>/attachments/<int:attachment_id>')
+def download_attachment(id, attachment_id):
+    """下载线索详情页附件"""
+    attachment = Attachment.query.filter_by(id=attachment_id, lead_id=id).first_or_404()
+    directory, filename = _resolve_instance_file(attachment.local_path)
+    if not directory:
+        abort(404)
+    return send_from_directory(directory, filename, as_attachment=True,
+                                download_name=attachment.file_name or filename)
 
 
 @leads.route('/<int:id>/convert', methods=['POST'])
@@ -228,7 +296,7 @@ def export():
     )
 
     # 写表头
-    headers = ['序号', '招标编号', '项目名称', '采购单位', '联系人', '电话',
+    headers = ['序号', '招标编号', '项目名称', '公告类型', '采购单位', '地域', '联系人', '电话',
                '预算金额(元)', '发布日期', '截止日期', '来源', '状态', '来源URL']
     for col_idx, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col_idx, value=header)
@@ -243,7 +311,9 @@ def export():
             row_idx - 1,
             lead.bidding_number or '',
             lead.project_name or '',
+            lead.announcement_type or '',
             lead.buyer_name or '',
+            lead.region or '',
             lead.contact_person or '',
             lead.phone or '',
             lead.budget_amount if lead.budget_amount is not None else '',
@@ -259,7 +329,7 @@ def export():
             cell.alignment = Alignment(vertical='center', wrap_text=True)
 
     # 自动列宽
-    col_widths = [6, 22, 42, 25, 12, 15, 15, 13, 13, 10, 10, 42]
+    col_widths = [6, 22, 42, 12, 25, 8, 12, 15, 15, 13, 13, 10, 10, 42]
     for i, width in enumerate(col_widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = width
 

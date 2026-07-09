@@ -30,18 +30,39 @@ if errorlevel 1 (
     )
 )
 
-:: 创建虚拟环境
-echo [1/3] 创建虚拟环境...
-uv venv
+:: 创建虚拟环境（已存在则跳过）
+if exist ".venv\Scripts\python.exe" (
+    echo [1/3] 检测到虚拟环境，跳过创建
+) else (
+    echo [1/3] 创建虚拟环境...
+    uv venv
+    if errorlevel 1 (
+        echo [错误] 虚拟环境创建失败
+        echo.
+        pause
+        exit /b
+    )
+)
 
-:: 安装依赖
-echo [2/3] 安装依赖...
-uv pip install -r requirements.txt -q
-if errorlevel 1 (
-    echo [错误] 依赖安装失败，请检查网络连接后重试
-    echo.
-    pause
-    exit /b
+:: 安装依赖（仅当 requirements.txt 有更新时才重新安装）
+set "REQ_HASH_FILE=.venv\requirements.hash"
+for /f %%h in ('certutil -hashfile requirements.txt SHA256 ^| findstr /v "hash CertUtil"') do set "REQ_HASH=%%h"
+
+set "OLD_HASH="
+if exist "%REQ_HASH_FILE%" set /p OLD_HASH=<"%REQ_HASH_FILE%"
+
+if "%REQ_HASH%"=="%OLD_HASH%" (
+    echo [2/3] 依赖未变化，跳过安装
+) else (
+    echo [2/3] 安装依赖...
+    uv pip install -r requirements.txt -q
+    if errorlevel 1 (
+        echo [错误] 依赖安装失败，请检查网络连接后重试
+        echo.
+        pause
+        exit /b
+    )
+    >"%REQ_HASH_FILE%" echo %REQ_HASH%
 )
 
 :: 启动服务

@@ -60,6 +60,17 @@
   </div>
 </div>
 
+<!-- 实时采集进度（运行时显示） -->
+<div id="progress-panel" class="card shadow-sm mb-4 border-primary" style="display:none;">
+  <div class="card-header d-flex justify-content-between align-items-center bg-primary text-white">
+    <h6 class="mb-0"><i class="bi bi-activity"></i> 实时采集进度</h6>
+    <span class="badge bg-light text-primary"><span class="spinner-border spinner-border-sm"></span> 采集中</span>
+  </div>
+  <div class="card-body" id="progress-body">
+    <!-- 进度条由 JS 动态渲染 -->
+  </div>
+</div>
+
 <!-- 数据源卡片 -->
 <div class="row mb-4">
   <div class="col-md-6">
@@ -148,6 +159,14 @@
         <button class="btn btn-success btn-sm w-100" id="btn-run" onclick="runScraperConfig()">
           <i class="bi bi-lightning-charge"></i> 开始采集
         </button>
+      </div>
+    </div>
+    <div class="row mt-2">
+      <div class="col-12">
+        <span class="text-muted small me-2">ccgp 频道快捷采集（按公告类型/地域采集全量公告，无需关键词）：</span>
+        <button type="button" class="btn btn-outline-primary btn-sm" onclick="setChannelKeywords('channel:zygg')">中央公告</button>
+        <button type="button" class="btn btn-outline-primary btn-sm" onclick="setChannelKeywords('channel:dfgg')">地方公告</button>
+        <button type="button" class="btn btn-outline-primary btn-sm" onclick="setChannelKeywords('channel:zygg,channel:dfgg')">中央+地方公告</button>
       </div>
     </div>
   </div>
@@ -252,6 +271,12 @@ function runScraperConfig() {
   doRun(taskType, keywords, maxPages);
 }
 
+// 快捷填入频道采集伪关键词（channel:zygg / channel:dfgg），并自动切换数据源为 ccgp
+function setChannelKeywords(val) {
+  document.getElementById('sel-source').value = 'ccgp';
+  document.getElementById('inp-keywords').value = val;
+}
+
 // 执行采集请求
 function doRun(taskType, keywords, maxPages) {
   var btnId = 'btn-' + taskType;
@@ -273,14 +298,8 @@ function doRun(taskType, keywords, maxPages) {
   .then(function(data) {
     showAlert(data.message, data.success ? 'success' : 'danger');
     if (data.success) {
-      // 开始轮询任务状态
-      setTimeout(refreshTasks, 2000);
-      setTimeout(refreshTasks, 5000);
-      setTimeout(refreshTasks, 10000);
-      setTimeout(refreshTasks, 20000);
-      setTimeout(refreshTasks, 30000);
-      setTimeout(refreshTasks, 60000);
-      setTimeout(refreshTasks, 120000);
+      // 启动实时进度轮询（含任务列表刷新）
+      startProgressPolling();
     }
   })
   .catch(function(err) {
@@ -297,6 +316,32 @@ function doRun(taskType, keywords, maxPages) {
         btn.innerHTML = '<i class="bi bi-lightning-charge"></i> 开始采集';
       }
     }
+  });
+}
+
+// 暂停 / 继续 / 停止 采集任务
+var CONTROL_URLS = {
+  pause: '{{ url_for("scraper.pause") }}',
+  resume: '{{ url_for("scraper.resume") }}',
+  stop: '{{ url_for("scraper.stop") }}'
+};
+
+function controlScraper(taskType, action) {
+  var url = CONTROL_URLS[action];
+  if (!url) return;
+
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ task_type: taskType })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    showAlert(data.message, data.success ? 'success' : 'danger');
+    pollProgress();
+  })
+  .catch(function(err) {
+    showAlert('请求失败: ' + err, 'danger');
   });
 }
 
@@ -352,6 +397,170 @@ function refreshTasks() {
   .catch(function(err) { console.error('刷新失败:', err); });
 }
 
+// ------- 实时进度 -------
+var _progressTimer = null;
+
+var SOURCE_LABELS = { ccgp: '中国政府采购网', gdgpo: '广东省采购网' };
+
+// 启动进度轮询（幂等）
+function startProgressPolling() {
+  if (_progressTimer) return;
+  pollProgress();
+  _progressTimer = setInterval(pollProgress, 2000);
+}
+
+// 停止进度轮询
+function stopProgressPolling() {
+  if (_progressTimer) {
+    clearInterval(_progressTimer);
+    _progressTimer = null;
+  }
+}
+
+// 拉取并渲染进度
+function pollProgress() {
+  fetch('{{ url_for("scraper.progress") }}')
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (!data.success) return;
+    renderProgress(data.progress || {});
+
+    var keys = Object.keys(data.progress || {});
+    if (!data.any_running && keys.length === 0) {
+      // 全部结束且无残留进度：停止轮询、隐藏面板、刷新历史
+      stopProgressPolling();
+      document.getElementById('progress-panel').style.display = 'none';
+      refreshTasks();
+    } else {
+      // 运行中：随进度刷新历史表
+      refreshTasks();
+    }
+  })
+  .catch(function(err) { console.error('进度获取失败:', err); });
+}
+
+// 渲染进度条（DOM 操作，防 XSS）
+function renderProgress(progress) {
+  var panel = document.getElementById('progress-panel');
+  var body = document.getElementById('progress-body');
+  var keys = Object.keys(progress);
+
+  if (keys.length === 0) {
+    panel.style.display = 'none';
+    body.innerHTML = '';
+    return;
+  }
+
+  panel.style.display = '';
+  body.innerHTML = '';
+
+  keys.forEach(function(key) {
+    var p = progress[key];
+    var percent = Math.max(0, Math.min(100, parseInt(p.percent, 10) || 0));
+
+    var wrap = document.createElement('div');
+    wrap.className = 'mb-3';
+
+    // 顶部标题行
+    var header = document.createElement('div');
+    header.className = 'd-flex justify-content-between align-items-center mb-1';
+
+    var title = document.createElement('span');
+    title.className = 'fw-bold';
+    title.textContent = SOURCE_LABELS[key] || key;
+
+    var statusBadge = document.createElement('span');
+    var st = p.status;
+    if (st === '完成') {
+      statusBadge.className = 'badge bg-success';
+      statusBadge.textContent = '完成';
+    } else if (st === '失败') {
+      statusBadge.className = 'badge bg-danger';
+      statusBadge.textContent = '失败';
+    } else if (st === '已停止') {
+      statusBadge.className = 'badge bg-secondary';
+      statusBadge.textContent = '已停止';
+    } else if (st === '已暂停') {
+      statusBadge.className = 'badge bg-warning text-dark';
+      statusBadge.textContent = '已暂停';
+    } else {
+      statusBadge.className = 'badge bg-primary';
+      statusBadge.textContent = '运行中';
+    }
+
+    var right = document.createElement('div');
+    right.className = 'd-flex align-items-center gap-2';
+    right.appendChild(statusBadge);
+
+    // 暂停/继续/停止 控制按钮（仅在未结束时显示）
+    var isFinished = (st === '完成' || st === '失败' || st === '已停止');
+    if (!isFinished) {
+      var btnGroup = document.createElement('div');
+      btnGroup.className = 'btn-group btn-group-sm ms-2';
+
+      var toggleBtn = document.createElement('button');
+      toggleBtn.type = 'button';
+      toggleBtn.className = 'btn btn-outline-primary';
+      if (p.paused || st === '已暂停') {
+        toggleBtn.innerHTML = '<i class="bi bi-play-fill"></i> 继续';
+        toggleBtn.onclick = function() { controlScraper(key, 'resume'); };
+      } else {
+        toggleBtn.innerHTML = '<i class="bi bi-pause-fill"></i> 暂停';
+        toggleBtn.onclick = function() { controlScraper(key, 'pause'); };
+      }
+
+      var stopBtn = document.createElement('button');
+      stopBtn.type = 'button';
+      stopBtn.className = 'btn btn-outline-danger';
+      stopBtn.innerHTML = '<i class="bi bi-stop-fill"></i> 停止';
+      stopBtn.onclick = function() { controlScraper(key, 'stop'); };
+
+      btnGroup.appendChild(toggleBtn);
+      btnGroup.appendChild(stopBtn);
+      right.appendChild(btnGroup);
+    }
+
+    header.appendChild(title);
+    header.appendChild(right);
+
+    // 进度条
+    var progressOuter = document.createElement('div');
+    progressOuter.className = 'progress';
+    progressOuter.style.height = '20px';
+
+    var bar = document.createElement('div');
+    var running = (st !== '完成' && st !== '失败' && st !== '已停止' && st !== '已暂停');
+    bar.className = 'progress-bar' +
+      (running ? ' progress-bar-striped progress-bar-animated' : '') +
+      (st === '失败' ? ' bg-danger' : st === '完成' ? ' bg-success' : st === '已停止' ? ' bg-secondary' : st === '已暂停' ? ' bg-warning' : '');
+    bar.style.width = percent + '%';
+    bar.setAttribute('role', 'progressbar');
+    bar.textContent = percent + '%';
+    progressOuter.appendChild(bar);
+
+    // 详情行
+    var detail = document.createElement('div');
+    detail.className = 'small text-muted mt-1 d-flex justify-content-between';
+
+    var msgSpan = document.createElement('span');
+    msgSpan.textContent = p.error_msg ? ('错误: ' + p.error_msg) : (p.message || '');
+    if (p.error_msg) { msgSpan.className = 'text-danger'; }
+
+    var statSpan = document.createElement('span');
+    var elapsed = (p.elapsed !== null && p.elapsed !== undefined) ? (p.elapsed + 's') : '-';
+    statSpan.textContent = '关键词 ' + (p.keyword_index || 0) + '/' + (p.total_keywords || 0) +
+      ' · 新增 ' + (p.collected || 0) + ' 条 · 用时 ' + elapsed;
+
+    detail.appendChild(msgSpan);
+    detail.appendChild(statSpan);
+
+    wrap.appendChild(header);
+    wrap.appendChild(progressOuter);
+    wrap.appendChild(detail);
+    body.appendChild(wrap);
+  });
+}
+
 // 显示提示（使用 DOM 操作避免 XSS）
 function showAlert(msg, type) {
   var container = document.getElementById('alert-container');
@@ -394,8 +603,8 @@ window.addEventListener('load', function() {
         if (data.running[k]) hasRunning = true;
       });
       if (hasRunning) {
-        // 有任务在运行，定期刷新
-        setInterval(refreshTasks, 5000);
+        // 有任务在运行，启动实时进度轮询
+        startProgressPolling();
       }
     }
   })

@@ -153,6 +153,80 @@ def run():
     })
 
 
+def _resolve_control_task_types(task_type):
+    """将 task_type ('ccgp'/'gdgpo'/'all') 解析为当前正在运行的数据源列表。"""
+    if task_type == 'all':
+        candidates = ['ccgp', 'gdgpo']
+    elif task_type in ('ccgp', 'gdgpo'):
+        candidates = [task_type]
+    else:
+        return None
+    return [tt for tt in candidates if tt in _running_tasks and _running_tasks[tt].is_alive()]
+
+
+@scraper.route('/pause', methods=['POST'])
+def pause():
+    """暂停指定数据源的采集任务（仅暂停，不终止线程）"""
+    from scraper import progress
+
+    data = request.get_json(silent=True) or request.form
+    task_type = data.get('task_type', 'ccgp')
+
+    task_types = _resolve_control_task_types(task_type)
+    if task_types is None:
+        return jsonify({'success': False, 'message': f'无效的数据源: {task_type}'}), 400
+    if not task_types:
+        return jsonify({'success': False, 'message': '没有正在运行的采集任务'}), 409
+
+    paused = [tt for tt in task_types if progress.request_pause(tt)]
+    if not paused:
+        return jsonify({'success': False, 'message': '暂停失败，任务可能已结束'}), 409
+
+    return jsonify({'success': True, 'message': f'已暂停: {", ".join(paused)}', 'task_types': paused})
+
+
+@scraper.route('/resume', methods=['POST'])
+def resume():
+    """恢复指定数据源已暂停的采集任务"""
+    from scraper import progress
+
+    data = request.get_json(silent=True) or request.form
+    task_type = data.get('task_type', 'ccgp')
+
+    task_types = _resolve_control_task_types(task_type)
+    if task_types is None:
+        return jsonify({'success': False, 'message': f'无效的数据源: {task_type}'}), 400
+    if not task_types:
+        return jsonify({'success': False, 'message': '没有正在运行的采集任务'}), 409
+
+    resumed = [tt for tt in task_types if progress.request_resume(tt)]
+    if not resumed:
+        return jsonify({'success': False, 'message': '恢复失败，任务可能已结束'}), 409
+
+    return jsonify({'success': True, 'message': f'已恢复: {", ".join(resumed)}', 'task_types': resumed})
+
+
+@scraper.route('/stop', methods=['POST'])
+def stop():
+    """停止指定数据源的采集任务（采集线程会在当前页处理完后安全退出）"""
+    from scraper import progress
+
+    data = request.get_json(silent=True) or request.form
+    task_type = data.get('task_type', 'ccgp')
+
+    task_types = _resolve_control_task_types(task_type)
+    if task_types is None:
+        return jsonify({'success': False, 'message': f'无效的数据源: {task_type}'}), 400
+    if not task_types:
+        return jsonify({'success': False, 'message': '没有正在运行的采集任务'}), 409
+
+    stopped = [tt for tt in task_types if progress.request_stop(tt)]
+    if not stopped:
+        return jsonify({'success': False, 'message': '停止失败，任务可能已结束'}), 409
+
+    return jsonify({'success': True, 'message': f'正在停止: {", ".join(stopped)}', 'task_types': stopped})
+
+
 @scraper.route('/task/<int:task_id>')
 def task_detail(task_id):
     """查看单个任务状态（AJAX返回JSON）"""
@@ -229,4 +303,22 @@ def status():
     return jsonify({
         'success': True,
         'running': running,
+    })
+
+
+@scraper.route('/progress')
+def progress():
+    """获取实时采集进度（AJAX）"""
+    from scraper.progress import get_all_progress
+
+    progress_data = get_all_progress()
+
+    any_running = any(
+        thread.is_alive() for thread in _running_tasks.values()
+    )
+
+    return jsonify({
+        'success': True,
+        'progress': progress_data,
+        'any_running': any_running,
     })

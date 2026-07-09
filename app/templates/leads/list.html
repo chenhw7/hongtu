@@ -25,6 +25,24 @@
       </select>
     </div>
     <div class="col-auto">
+      <label class="form-label mb-1">公告类型</label>
+      <select name="announcement_type" class="form-select form-select-sm">
+        <option value="">全部</option>
+        {% for t in announcement_types %}
+        <option value="{{ t }}" {{ 'selected' if announcement_type == t }}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <label class="form-label mb-1">地域</label>
+      <select name="region" class="form-select form-select-sm">
+        <option value="">全部</option>
+        {% for r in regions %}
+        <option value="{{ r }}" {{ 'selected' if region == r }}>{{ r }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
       <label class="form-label mb-1">发布日期起</label>
       <input type="date" name="date_from" class="form-control form-control-sm" value="{{ date_from or '' }}">
     </div>
@@ -104,8 +122,16 @@
               <a href="{{ url_for('leads.detail', id=lead.id) }}" class="text-decoration-none" title="{{ lead.project_name or '' }}">
                 <span class="text-truncate-2">{{ lead.project_name or '—' }}</span>
               </a>
+              {% if lead.announcement_type %}
+              <div><span class="badge bg-light text-dark border small">{{ lead.announcement_type }}</span></div>
+              {% endif %}
             </td>
-            <td>{{ lead.buyer_name or '—' }}</td>
+            <td>
+              {{ lead.buyer_name or '—' }}
+              {% if lead.region %}
+              <div class="text-muted small"><i class="bi bi-geo-alt"></i> {{ lead.region }}</div>
+              {% endif %}
+            </td>
             <td>{{ lead.contact_person or '—' }}</td>
             <td>{{ lead.phone or '—' }}</td>
             <td class="text-end">

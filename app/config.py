@@ -12,6 +12,13 @@ class Config:
     SCRAPE_CHECK_ROBOTS = False  # ccgp/gdgpo 无可用 robots.txt，检查反而触发反爬
     SCRAPE_ANTI_SCRAPE_WAIT = 60  # 检测到反爬/请求失败后的等待时间（秒）
     SCRAPER_KEYWORDS = ['管道', 'PVC管', 'HDPE管', 'PPR管', '给排水', '市政管道', '塑料管']
+    # 详情页快照与附件下载
+    SCRAPE_SAVE_SNAPSHOT = True  # 是否保存详情页HTML快照（防止公告被撤回/修改后无法追溯）
+    SCRAPE_DOWNLOAD_ATTACHMENTS = True  # 是否下载详情页中的附件（招标文件/报价单等）
+    SCRAPE_ATTACHMENT_MAX_SIZE = 20 * 1024 * 1024  # 单个附件最大下载大小（字节），超出则跳过
+    SCRAPE_ATTACHMENT_MAX_COUNT = 10  # 单条线索最多下载附件数量
+    SCRAPE_SNAPSHOT_DIR = 'snapshots'  # 快照保存目录（相对于 instance 目录）
+    SCRAPE_ATTACHMENT_DIR = 'attachments'  # 附件保存目录（相对于 instance 目录）
     # 分页
     PER_PAGE = 20
     # 文件上传大小限制
