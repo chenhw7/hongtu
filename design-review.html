@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>鸿图建材获客工具 — 设计预览</title>
+<style>
+/* ============================================================
+   Design System
+   ============================================================ */
+:root {
+  --bg-root:        #f9f8f6;
+  --bg-surface:     #ffffff;
+  --bg-sidebar:     #171717;
+  --bg-sidebar-hover: #242424;
+  --bg-sidebar-active: #2a2a2a;
+  --border-subtle:  #eae7e1;
+  --border-default: #e2ded7;
+  --border-sidebar: #2a2a2a;
+  --text-primary:   #171717;
+  --text-secondary: #6b6b6b;
+  --text-muted:     #9c9c9c;
+  --text-sidebar:   #999999;
+  --text-sidebar-active: #f0f0f0;
+  --accent:         #3b5ccc;
+  --accent-soft:    #eef1fb;
+  --accent-hover:   #3451b0;
+  --green:          #1a8a5a;
+  --green-soft:     #eaf7f0;
+  --amber:          #c2780a;
+  --amber-soft:     #fef7e7;
+  --red:            #c53030;
+  --red-soft:       #fef2f2;
+  --slate:          #6b7280;
+  --slate-soft:     #f3f4f6;
+  --radius-sm:      6px;
+  --radius-md:      10px;
+  --sidebar-w:      210px;
+  --topbar-h:       44px;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; -webkit-font-smoothing: antialiased; }
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-root);
+  color: var(--text-primary);
+  line-height: 1.5;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ============================================================
+   Sidebar
+   ============================================================ */
+.sidebar {
+  position: fixed; top: 0; left: 0; bottom: 0;
+  width: var(--sidebar-w);
+  background: var(--bg-sidebar);
+  display: flex; flex-direction: column;
+  z-index: 100;
+  border-right: 1px solid var(--border-sidebar);
+}
+.sidebar-brand {
+  padding: 16px 18px 14px;
+  display: flex; align-items: center; gap: 10px;
+}
+.sidebar-brand .logo-mark {
+  width: 26px; height: 26px;
+  background: var(--accent);
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 13px; font-weight: 700;
+  flex-shrink: 0;
+}
+.sidebar-brand .brand-text {
+  color: #e0e0e0;
+  font-size: 13px; font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
+}
+.sidebar-nav { flex: 1; padding: 6px 10px; display: flex; flex-direction: column; gap: 1px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--text-sidebar);
+  text-decoration: none;
+  font-size: 13px; font-weight: 450;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  border: none; background: none;
+  width: 100%; text-align: left;
+  font-family: inherit;
+}
+.nav-item:hover  { color: #d0d0d0; background: var(--bg-sidebar-hover); }
+.nav-item.active { color: var(--text-sidebar-active); background: var(--bg-sidebar-active); font-weight: 520; }
+.nav-item svg { flex-shrink: 0; opacity: 0.55; }
+.nav-item.active svg { opacity: 0.9; }
+.nav-item .nav-badge {
+  margin-left: auto;
+  font-size: 10px; font-weight: 600;
+  background: var(--accent); color: #fff;
+  padding: 1px 6px; border-radius: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.sidebar-footer {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-sidebar);
+  display: flex; align-items: center; gap: 8px;
+}
+.sidebar-footer .user-avatar {
+  width: 28px; height: 28px; border-radius: var(--radius-sm);
+  background: #3c3c3c; color: #b0b0b0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600;
+}
+.sidebar-footer .user-info { font-size: 11px; color: #888; line-height: 1.4; }
+.sidebar-footer .user-info strong { display: block; color: #c0c0c0; font-weight: 500; }
+
+/* ============================================================
+   Main
+   ============================================================ */
+.main {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  display: flex; flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+.topbar {
+  height: var(--topbar-h); flex-shrink: 0;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex; align-items: center;
+  padding: 0 20px;
+}
+.topbar-breadcrumb { font-size: 13px; color: var(--text-secondary); font-weight: 450; }
+.topbar-breadcrumb span { color: var(--text-primary); font-weight: 550; }
+.topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.topbar-actions .tb-time {
+  font-size: 12px; color: var(--text-muted);
+  background: var(--bg-root); padding: 3px 8px; border-radius: var(--radius-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Content — fills remaining height, never scrolls */
+.content { flex: 1; overflow: hidden; padding: 14px 20px; }
+
+/* Views — each fills content area, flex column */
+.view { display: none; }
+.view.active { display: flex; flex-direction: column; height: 100%; overflow: hidden; animation: fadeIn 0.2s ease; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* ============================================================
+   Toolbar (compact header row)
+   ============================================================ */
+.toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0;
+  margin-bottom: 10px;
+}
+.toolbar-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.toolbar-actions { display: flex; gap: 6px; align-items: center; }
+.toolbar-meta { font-size: 12px; color: var(--text-muted); }
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+.btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 14px;
+  font-size: 12px; font-weight: 520;
+  font-family: var(--font-sans);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  line-height: 1.5;
+  text-decoration: none;
+}
+.btn:active { transform: scale(0.985); }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-secondary { background: var(--bg-surface); color: var(--text-primary); border-color: var(--border-default); }
+.btn-secondary:hover { background: #f5f4f1; border-color: #d5d0c8; }
+.btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
+.btn-ghost:hover { background: var(--bg-root); color: var(--text-primary); }
+.btn-sm { padding: 3px 8px; font-size: 11px; }
+.btn-xs { padding: 2px 7px; font-size: 11px; border-radius: 4px; }
+.btn svg { flex-shrink: 0; }
+
+/* ============================================================
+   Stat Cards
+   ============================================================ */
+.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; flex-shrink: 0; margin-bottom: 12px; }
+.stat-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  display: flex; align-items: center; gap: 14px;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  text-decoration: none; color: inherit;
+}
+.stat-card:hover { border-color: var(--border-default); box-shadow: 0 1px 8px rgba(0,0,0,0.03); }
+.stat-icon {
+  width: 38px; height: 38px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.stat-icon svg { width: 20px; height: 20px; }
+.stat-icon.blue  { background: var(--accent-soft); color: var(--accent); }
+.stat-icon.green { background: var(--green-soft);  color: var(--green); }
+.stat-icon.amber { background: var(--amber-soft); color: var(--amber); }
+.stat-value {
+  font-size: 24px; font-weight: 650; color: var(--text-primary);
+  line-height: 1; font-variant-numeric: tabular-nums;
+}
+.stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 2px; font-weight: 450; }
+.stat-trend { font-size: 11px; font-variant-numeric: tabular-nums; }
+.stat-trend.up { color: var(--green); }
+.stat-trend.down { color: var(--red); }
+
+/* ============================================================
+   Section Cards & Tables
+   ============================================================ */
+.section-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; overflow: hidden; }
+.section-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.section-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.section-card-header h3 { font-size: 13px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 6px; }
+.section-card-header h3 .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+.table-wrap { flex: 1; overflow-y: auto; overflow-x: auto; }
+table {
+  width: 100%; border-collapse: collapse;
+  font-size: 12px;
+}
+table thead { position: sticky; top: 0; z-index: 1; }
+table thead th {
+  text-align: left; padding: 8px 14px;
+  font-weight: 550; font-size: 10px;
+  color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #fafaf9;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+table tbody td {
+  padding: 8px 14px;
+  border-bottom: 1px solid #f5f3f0;
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+table tbody tr { transition: background 0.1s ease; }
+table tbody tr:hover { background: #fafaf9; }
+table tbody tr:last-child td { border-bottom: none; }
+table .cell-mono { font-variant-numeric: tabular-nums; }
+table .cell-secondary { color: var(--text-secondary); }
+table .cell-muted { color: var(--text-muted); font-size: 11px; }
+table .cell-link { color: var(--accent); cursor: pointer; font-weight: 500; text-decoration: none; }
+table .cell-link:hover { text-decoration: underline; }
+table .cell-truncate { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table .cell-actions { display: flex; gap: 4px; }
+
+/* Badges */
+.badge {
+  display: inline-block; padding: 1px 8px; border-radius: 10px;
+  font-size: 11px; font-weight: 520; white-space: nowrap;
+}
+.badge-slate  { background: var(--slate-soft); color: var(--slate); }
+.badge-green  { background: var(--green-soft); color: var(--green); }
+.badge-amber  { background: var(--amber-soft); color: var(--amber); }
+.badge-red    { background: var(--red-soft); color: var(--red); }
+.badge-accent { background: var(--accent-soft); color: var(--accent); }
+
+/* Checkbox */
+.checkbox-custom {
+  width: 14px; height: 14px; border-radius: 3px;
+  border: 1.5px solid var(--border-default);
+  appearance: none; cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0; margin: 0;
+}
+.checkbox-custom:checked { background: var(--accent); border-color: var(--accent); }
+.checkbox-custom:checked::after {
+  content: ""; display: block;
+  width: 3px; height: 7px;
+  border: solid #fff; border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+  margin: 1px 0 0 4px;
+}
+
+/* ============================================================
+   Filter Bar
+   ============================================================ */
+.filter-bar {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  display: flex; align-items: center; gap: 10px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.search-input {
+  flex: 1; min-width: 160px;
+  padding: 5px 10px; border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  font-size: 12px; font-family: var(--font-sans);
+  background: var(--bg-root); color: var(--text-primary);
+  outline: none; transition: border-color 0.15s ease;
+}
+.search-input:focus { border-color: var(--accent); background: var(--bg-surface); }
+.search-input::placeholder { color: var(--text-muted); }
+.filter-select {
+  padding: 5px 28px 5px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  font-size: 12px; font-family: var(--font-sans);
+  background: var(--bg-root); color: var(--text-primary);
+  outline: none; cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239c9c9c' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 8px center;
+  transition: border-color 0.15s ease;
+}
+.filter-select:focus { border-color: var(--accent); }
+.filter-divider { width: 1px; height: 20px; background: var(--border-subtle); flex-shrink: 0; }
+
+/* ============================================================
+   Pagination
+   ============================================================ */
+.pagination {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.pagination-left { display: flex; align-items: center; gap: 10px; }
+.pagination-info { color: var(--text-muted); font-size: 11px; }
+.pagination-info strong { color: var(--text-secondary); font-weight: 550; }
+.page-size-select {
+  padding: 3px 24px 3px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 4px; font-size: 11px; font-family: var(--font-sans);
+  background: var(--bg-root); color: var(--text-secondary);
+  outline: none; cursor: pointer; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239c9c9c' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 6px center;
+}
+.pagination-pages { display: flex; gap: 1px; }
+.pagination-pages button {
+  width: 28px; height: 28px; border-radius: var(--radius-sm);
+  border: 1px solid transparent; background: transparent;
+  font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text-secondary);
+  cursor: pointer; transition: all 0.1s ease;
+  display: flex; align-items: center; justify-content: center;
+}
+.pagination-pages button:hover { background: var(--bg-root); border-color: var(--border-default); }
+.pagination-pages button.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+
+/* ============================================================
+   Scraper Cards
+   ============================================================ */
+.scraper-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex-shrink: 0; margin-bottom: 12px; }
+.scraper-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  transition: all 0.15s ease;
+}
+.scraper-card:hover { border-color: var(--border-default); }
+.scraper-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.scraper-card-header h3 { font-size: 14px; font-weight: 600; }
+.scraper-card-meta { display: flex; flex-direction: column; gap: 4px; }
+.scraper-card-meta .meta-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
+.scraper-card-meta .meta-label { color: var(--text-muted); }
+.scraper-card-meta .meta-value { font-size: 11px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 5px; }
+.status-dot.online { background: var(--green); }
+.status-dot.idle { background: var(--slate); }
+
+/* Config row */
+.config-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; background: var(--bg-root);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+.config-row label { color: var(--text-secondary); white-space: nowrap; font-weight: 500; }
+.config-row input[type="number"] {
+  width: 50px; padding: 4px 6px; border: 1px solid var(--border-default);
+  border-radius: 4px; font-size: 12px; text-align: center;
+  background: var(--bg-surface); outline: none; font-variant-numeric: tabular-nums;
+}
+.config-row input[type="number"]:focus { border-color: var(--accent); }
+.config-row select {
+  padding: 4px 24px 4px 6px; border: 1px solid var(--border-default);
+  border-radius: 4px; font-size: 12px; font-family: var(--font-sans);
+  background: var(--bg-surface); outline: none; cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239c9c9c' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 6px center;
+}
+.tag-input-area {
+  display: flex; flex-wrap: wrap; gap: 3px; align-items: center;
+  flex: 1; padding: 3px 6px; background: var(--bg-surface);
+  border: 1px solid var(--border-default); border-radius: 4px;
+  min-height: 28px;
+}
+.tag-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 6px; background: var(--accent-soft); color: var(--accent);
+  border-radius: 3px; font-size: 11px; font-weight: 500;
+}
+.tag-chip .tag-close { cursor: pointer; opacity: 0.5; font-size: 12px; line-height: 1; }
+.tag-chip .tag-close:hover { opacity: 1; }
+
+/* ============================================================
+   Scraper view overrides — it scrolls as a whole
+   ============================================================ */
+#view-scraper.active { overflow-y: auto; }
+#view-scraper .section-card-full { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 200px; }
+#view-scraper .section-card-full .table-wrap { flex: 1; overflow-y: auto; }
+
+/* Full-width card variant */
+.section-card-full {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  flex: 1;
+}
+.section-card-full .section-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.section-card-full .section-card-header h3 { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+
+/* Scraper config compact */
+.scraper-config {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px 16px; flex-shrink: 0; margin-bottom: 12px;
+}
+.scraper-config .config-row { margin-bottom: 8px; }
+.scraper-config .config-row:last-child { margin-bottom: 0; }
+
+/* ============================================================
+   Utility
+   ============================================================ */
+.text-mono { font-variant-numeric: tabular-nums; }
+.text-xs { font-size: 11px; }
+.text-sm { font-size: 12px; }
+.text-muted { color: var(--text-muted); }
+.text-secondary { color: var(--text-secondary); }
+.ml-auto { margin-left: auto; }
+
+/* ============================================================
+   Scrollbar
+   ============================================================ */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d5d0c8; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #b8b3aa; }
+
+::selection { background: var(--accent-soft); color: var(--text-primary); }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     Sidebar
+     ============================================================ -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="logo-mark">鸿</div>
+    <div class="brand-text">鸿图建材<br>获客工具</div>
+  </div>
+  <nav class="sidebar-nav">
+    <button class="nav-item active" data-view="dashboard" onclick="switchView('dashboard', this)">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+      </svg>
+      仪表盘
+    </button>
+    <button class="nav-item" data-view="customers" onclick="switchView('customers', this)">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.85"/>
+      </svg>
+      客户管理
+      <span class="nav-badge">128</span>
+    </button>
+    <button class="nav-item" data-view="leads" onclick="switchView('leads', this)">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+      </svg>
+      线索管理
+      <span class="nav-badge">56</span>
+    </button>
+    <button class="nav-item" data-view="scraper" onclick="switchView('scraper', this)">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+      </svg>
+      爬虫控制
+    </button>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="user-avatar">张</div>
+    <div class="user-info"><strong>张经理</strong><span>管理员</span></div>
+  </div>
+</aside>
+
+<!-- ============================================================
+     Main
+     ============================================================ -->
+<main class="main">
+  <div class="topbar">
+    <div class="topbar-breadcrumb">
+      鸿图建材获客工具 <span style="margin:0 4px;color:#ccc;">/</span> <span id="breadcrumb-label">仪表盘</span>
+    </div>
+    <div class="topbar-actions">
+      <span class="tb-time" id="clock">--</span>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ============================================================
+         Dashboard
+         ============================================================ -->
+    <div class="view active" id="view-dashboard">
+      <!-- Stat cards -->
+      <div class="stat-grid">
+        <a class="stat-card" href="#">
+          <div class="stat-icon blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/></svg>
+          </div>
+          <div>
+            <div class="stat-value">128</div>
+            <div class="stat-label">总客户数</div>
+            <div class="stat-trend up">↑ 12% 较上月</div>
+          </div>
+        </a>
+        <a class="stat-card" href="#">
+          <div class="stat-icon green">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+          </div>
+          <div>
+            <div class="stat-value">5</div>
+            <div class="stat-label">今日新增</div>
+            <div class="stat-trend up">↑ 3 较昨日</div>
+          </div>
+        </a>
+        <a class="stat-card" href="#">
+          <div class="stat-icon amber">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div>
+            <div class="stat-value">23</div>
+            <div class="stat-label">待跟进客户</div>
+            <div class="stat-trend down">↓ 5 已逾期</div>
+          </div>
+        </a>
+      </div>
+
+      <!-- Table cards — fill remaining height -->
+      <div class="section-grid">
+        <div class="section-card">
+          <div class="section-card-header">
+            <h3><span class="dot"></span>最近跟进记录</h3>
+            <a href="#" class="btn btn-ghost btn-sm" onclick="switchView('customers', document.querySelector('[data-view=customers]'))">查看全部 →</a>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>客户名称</th><th>方式</th><th>跟进内容</th><th>日期</th></tr></thead>
+              <tbody>
+                <tr><td class="cell-link">江门市建安集团</td><td><span class="badge badge-slate">电话</span></td><td class="cell-truncate" style="max-width:140px" title="沟通了水泥采购需求，约定下周三面谈">沟通了水泥采购需求，约定下周三面谈</td><td class="cell-muted">07-09 14:30</td></tr>
+                <tr><td class="cell-link">新会区市政工程公司</td><td><span class="badge badge-slate">拜访</span></td><td class="cell-truncate" style="max-width:140px" title="现场查看了项目进度，确认了第二批钢材用量">现场查看了项目进度，确认了第二批钢材用量</td><td class="cell-muted">07-09 10:15</td></tr>
+                <tr><td class="cell-link">蓬江区瑞泰建材</td><td><span class="badge badge-accent">微信</span></td><td class="cell-truncate" style="max-width:140px" title="发送了最新报价单，客户表示需要内部讨论">发送了最新报价单，客户表示需要内部讨论</td><td class="cell-muted">07-08 16:45</td></tr>
+                <tr><td class="cell-link">台山市恒达建筑</td><td><span class="badge badge-slate">电话</span></td><td class="cell-truncate" style="max-width:140px" title="跟进上周报价，客户对价格满意，等待审批">跟进上周报价，客户对价格满意，等待审批</td><td class="cell-muted">07-08 09:20</td></tr>
+                <tr><td class="cell-link">开平市永固工程</td><td><span class="badge badge-slate">邮件</span></td><td class="cell-truncate" style="max-width:140px" title="发送了产品规格书和技术参数，待回复">发送了产品规格书和技术参数，待回复</td><td class="cell-muted">07-07 15:00</td></tr>
+                <tr><td class="cell-link">恩平市伟业建材</td><td><span class="badge badge-slate">电话</span></td><td class="cell-truncate" style="max-width:140px" title="客户反馈价格偏高，需重新报价">客户反馈价格偏高，需重新报价</td><td class="cell-muted">07-07 11:30</td></tr>
+                <tr><td class="cell-link">鹤山市鹏程建材</td><td><span class="badge badge-accent">微信</span></td><td class="cell-truncate" style="max-width:140px" title="确认了物流方案，预计下周开始供货">确认了物流方案，预计下周开始供货</td><td class="cell-muted">07-06 16:00</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="section-card">
+          <div class="section-card-header">
+            <h3><span class="dot"></span>最近新增客户</h3>
+            <a href="#" class="btn btn-ghost btn-sm" onclick="switchView('customers', document.querySelector('[data-view=customers]'))">查看全部 →</a>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>公司名称</th><th>联系人</th><th>电话</th><th>状态</th><th>日期</th></tr></thead>
+              <tbody>
+                <tr><td class="cell-link">江门市建安集团</td><td>陈总</td><td>138****6789</td><td><span class="badge badge-green">已报价</span></td><td class="cell-muted">07-09</td></tr>
+                <tr><td class="cell-link">新会区市政工程公司</td><td>李经理</td><td>139****8901</td><td><span class="badge badge-accent">跟进中</span></td><td class="cell-muted">07-08</td></tr>
+                <tr><td class="cell-link">鹤山市鹏程建材</td><td>王总</td><td>137****4567</td><td><span class="badge badge-amber">新线索</span></td><td class="cell-muted">07-08</td></tr>
+                <tr><td class="cell-link">蓬江区瑞泰建材</td><td>赵经理</td><td>136****2345</td><td><span class="badge badge-green">已成交</span></td><td class="cell-muted">07-07</td></tr>
+                <tr><td class="cell-link">台山市恒达建筑</td><td>周总</td><td>135****7890</td><td><span class="badge badge-accent">跟进中</span></td><td class="cell-muted">07-06</td></tr>
+                <tr><td class="cell-link">恩平市伟业建材</td><td>刘总</td><td>133****0123</td><td><span class="badge badge-red">已流失</span></td><td class="cell-muted">07-05</td></tr>
+                <tr><td class="cell-link">开平市永固工程</td><td>黄总</td><td>132****3456</td><td><span class="badge badge-amber">新线索</span></td><td class="cell-muted">07-04</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         Customer Management
+         ============================================================ -->
+    <div class="view" id="view-customers">
+      <div class="toolbar">
+        <span class="toolbar-title">客户管理</span>
+        <div class="toolbar-actions">
+          <button class="btn btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            导入 Excel
+          </button>
+          <button class="btn btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            导出 Excel
+          </button>
+          <button class="btn btn-primary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            新增客户
+          </button>
+        </div>
+      </div>
+
+      <div class="filter-bar">
+        <input type="text" class="search-input" placeholder="搜索公司名称、联系人、电话...">
+        <div class="filter-divider"></div>
+        <select class="filter-select">
+          <option>全部状态</option><option>新线索</option><option>跟进中</option><option>已报价</option><option>已成交</option><option>已流失</option>
+        </select>
+        <select class="filter-select">
+          <option>创建时间不限</option><option>今天</option><option>最近 7 天</option><option>最近 30 天</option>
+        </select>
+        <span class="text-sm text-muted ml-auto">共 128 条记录</span>
+      </div>
+
+      <div class="section-card-full">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>公司名称</th><th>联系人</th><th>电话</th><th>来源</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td class="cell-link">江门市建安集团</td><td>陈总</td><td>138****6789</td><td class="cell-secondary">手动录入</td><td><span class="badge badge-green">已报价</span></td><td class="cell-muted">2026-07-09</td><td class="cell-actions"><button class="btn btn-ghost btn-xs">详情</button><button class="btn btn-ghost btn-xs">编辑</button><button class="btn btn-ghost btn-xs" style="color:var(--red)">删除</button></td></tr>
+              <tr><td class="cell-link">新会区市政工程公司</td><td>李经理</td><td>139****8901</td><td class="cell-secondary">线索转化</td><td><span class="badge badge-accent">跟进中</span></td><td class="cell-muted">2026-07-08</td><td class="cell-actions"><button class="btn btn-ghost btn-xs">详情</button><button class="btn btn-ghost btn-xs">编辑</button><button class="btn btn-ghost btn-xs" style="color:var(--red)">删除</button></td></tr>
+              <tr><td class="cell-link">鹤山市鹏程建材</td><td>王总</td><td>137****4567</td><td class="cell-secondary">手动录入</td><td><span class="badge badge-amber">新线索</span></td><td class="cell-muted">2026-07-08</td><td class="cell-actions"><button class="btn btn-ghost btn-xs">详情</button><button class="btn btn-ghost btn-xs">编辑</button><button class="btn btn-ghost btn-xs" style="color:var(--red)">删除</button></td></tr>
+              <tr><td class="cell-link">蓬江区瑞泰建材</td><td>赵经理</td><td>136****2345</td><td class="cell-secondary">线索转化</td><td><span class="badge badge-green">已成交</span></td><td class="cell-muted">2026-07-07</td><td class="cell-actions"><button class="btn btn-ghost btn-xs">详情</button><button class="btn btn-ghost btn-xs">编辑</button><button class="btn btn-ghost btn-xs" style="color:var(--red)">删除</button></td></tr>
+              <tr><td class="cell-link">台山市恒达建筑</td><td>周总</td><td>135****7890</td><td class="cell-secondary">手动录入</td><td><span class="badge badge-accent">跟进中</span></td><td class="cell-muted">2026-07-06</td><td class="cell-actions"><button class="btn btn-ghost btn-xs">详情</button><button class="btn btn-ghost btn-xs">编辑</button><button class="btn btn-ghost btn-xs" style="color:var(--red)">删除</button></td></tr>
+              <tr><td class="cell-link">恩平市伟业建材</td><td>刘总</td><td>133****0123</td><td class="cell-secondary">Excel导入</td><td><span class="badge badge-red">已流失</span></td><td class="cell-muted">2026-07-05</td><td class="cell-actions"><button class="btn btn-ghost btn-xs">详情</button><button class="btn btn-ghost btn-xs">编辑</button><button class="btn btn-ghost btn-xs" style="color:var(--red)">删除</button></td></tr>
+              <tr><td class="cell-link">开平市永固工程</td><td>黄总</td><td>132****3456</td><td class="cell-secondary">线索转化</td><td><span class="badge badge-accent">跟进中</span></td><td class="cell-muted">2026-07-04</td><td class="cell-actions"><button class="btn btn-ghost btn-xs">详情</button><button class="btn btn-ghost btn-xs">编辑</button><button class="btn btn-ghost btn-xs" style="color:var(--red)">删除</button></td></tr>
+              <tr><td class="cell-link">台山市伟业建筑</td><td>林总</td><td>131****7890</td><td class="cell-secondary">手动录入</td><td><span class="badge badge-amber">新线索</span></td><td class="cell-muted">2026-07-03</td><td class="cell-actions"><button class="btn btn-ghost btn-xs">详情</button><button class="btn btn-ghost btn-xs">编辑</button><button class="btn btn-ghost btn-xs" style="color:var(--red)">删除</button></td></tr>
+              <tr><td class="cell-link">新会区华建集团</td><td>何经理</td><td>130****5678</td><td class="cell-secondary">Excel导入</td><td><span class="badge badge-green">已报价</span></td><td class="cell-muted">2026-07-02</td><td class="cell-actions"><button class="btn btn-ghost btn-xs">详情</button><button class="btn btn-ghost btn-xs">编辑</button><button class="btn btn-ghost btn-xs" style="color:var(--red)">删除</button></td></tr>
+              <tr><td class="cell-link">蓬江区宏业建材</td><td>郑总</td><td>129****1234</td><td class="cell-secondary">手动录入</td><td><span class="badge badge-green">已成交</span></td><td class="cell-muted">2026-07-01</td><td class="cell-actions"><button class="btn btn-ghost btn-xs">详情</button><button class="btn btn-ghost btn-xs">编辑</button><button class="btn btn-ghost btn-xs" style="color:var(--red)">删除</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination">
+          <div class="pagination-left">
+            <span class="pagination-info">显示 <strong>1–10</strong>，共 <strong>128</strong> 条</span>
+            <select class="page-size-select" onchange="updatePageSize(this.value, 'customers-count')">
+              <option value="10">10 条/页</option><option value="20">20 条/页</option><option value="50">50 条/页</option>
+            </select>
+          </div>
+          <div class="pagination-pages">
+            <button class="active">1</button><button>2</button><button>3</button><button>…</button><button>13</button><button>→</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         Lead Management
+         ============================================================ -->
+    <div class="view" id="view-leads">
+      <div class="toolbar">
+        <span class="toolbar-title">线索管理</span>
+        <div class="toolbar-actions">
+          <button class="btn btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            导出 Excel
+          </button>
+          <button class="btn btn-primary">批量转客户</button>
+        </div>
+      </div>
+
+      <div class="filter-bar">
+        <input type="text" class="search-input" placeholder="搜索项目名称、采购单位...">
+        <div class="filter-divider"></div>
+        <select class="filter-select"><option>全部来源</option><option>中国政府采购网</option><option>广东省政府采购网</option></select>
+        <select class="filter-select"><option>全部状态</option><option>待处理</option><option>已转化</option></select>
+        <select class="filter-select"><option>发布时间不限</option><option>今天</option><option>最近 3 天</option><option>最近 7 天</option></select>
+        <span class="text-sm text-muted ml-auto">共 56 条线索</span>
+      </div>
+
+      <div class="section-card-full">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th style="width:30px"><input type="checkbox" class="checkbox-custom"></th><th>项目名称</th><th>采购单位</th><th>来源</th><th>发布时间</th><th>预算金额</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td><input type="checkbox" class="checkbox-custom"></td><td class="cell-link cell-truncate" style="max-width:220px" title="2026年度江门市蓬江区道路改造工程水泥采购项目">2026年度江门市蓬江区道路改造工程水泥采购项目</td><td class="cell-secondary">蓬江区住建局</td><td><span class="badge badge-slate">中国政府采购网</span></td><td class="cell-muted">2026-07-09</td><td>¥ 380万</td><td><span class="badge badge-amber">待处理</span></td><td class="cell-actions"><button class="btn btn-primary btn-xs">转客户</button><button class="btn btn-ghost btn-xs">详情</button></td></tr>
+              <tr><td><input type="checkbox" class="checkbox-custom"></td><td class="cell-link cell-truncate" style="max-width:220px" title="新会区2026年市政管网改造工程钢材采购">新会区2026年市政管网改造工程钢材采购</td><td class="cell-secondary">新会区城管局</td><td><span class="badge badge-slate">广东省政府采购网</span></td><td class="cell-muted">2026-07-08</td><td>¥ 520万</td><td><span class="badge badge-amber">待处理</span></td><td class="cell-actions"><button class="btn btn-primary btn-xs">转客户</button><button class="btn btn-ghost btn-xs">详情</button></td></tr>
+              <tr style="background:#fafdf9"><td><input type="checkbox" class="checkbox-custom" disabled></td><td class="cell-link cell-truncate" style="max-width:220px" title="台山市2026年农村公路建设水泥采购项目">台山市2026年农村公路建设水泥采购项目</td><td class="cell-secondary">台山市交通局</td><td><span class="badge badge-slate">中国政府采购网</span></td><td class="cell-muted">2026-07-07</td><td>¥ 210万</td><td><span class="badge badge-green">已转化</span></td><td class="cell-actions"><span class="text-xs text-muted">已转客户</span></td></tr>
+              <tr><td><input type="checkbox" class="checkbox-custom"></td><td class="cell-link cell-truncate" style="max-width:220px" title="开平市2026年学校校舍维修加固工程建材采购">开平市2026年学校校舍维修加固工程建材采购</td><td class="cell-secondary">开平市教育局</td><td><span class="badge badge-slate">广东省政府采购网</span></td><td class="cell-muted">2026-07-07</td><td>¥ 165万</td><td><span class="badge badge-amber">待处理</span></td><td class="cell-actions"><button class="btn btn-primary btn-xs">转客户</button><button class="btn btn-ghost btn-xs">详情</button></td></tr>
+              <tr><td><input type="checkbox" class="checkbox-custom"></td><td class="cell-link cell-truncate" style="max-width:220px" title="鹤山市2026年工业园区配套道路工程沥青采购">鹤山市2026年工业园区配套道路工程沥青采购</td><td class="cell-secondary">鹤山市工业园管委会</td><td><span class="badge badge-slate">中国政府采购网</span></td><td class="cell-muted">2026-07-06</td><td>¥ 450万</td><td><span class="badge badge-amber">待处理</span></td><td class="cell-actions"><button class="btn btn-primary btn-xs">转客户</button><button class="btn btn-ghost btn-xs">详情</button></td></tr>
+              <tr><td><input type="checkbox" class="checkbox-custom"></td><td class="cell-link cell-truncate" style="max-width:220px" title="江门市2026年保障性住房建设项目钢材采购">江门市2026年保障性住房建设项目钢材采购</td><td class="cell-secondary">江门市住建局</td><td><span class="badge badge-slate">中国政府采购网</span></td><td class="cell-muted">2026-07-05</td><td>¥ 620万</td><td><span class="badge badge-amber">待处理</span></td><td class="cell-actions"><button class="btn btn-primary btn-xs">转客户</button><button class="btn btn-ghost btn-xs">详情</button></td></tr>
+              <tr><td><input type="checkbox" class="checkbox-custom"></td><td class="cell-link cell-truncate" style="max-width:220px" title="恩平市2026年水利工程修复项目水泥采购">恩平市2026年水利工程修复项目水泥采购</td><td class="cell-secondary">恩平市水务局</td><td><span class="badge badge-slate">广东省政府采购网</span></td><td class="cell-muted">2026-07-05</td><td>¥ 290万</td><td><span class="badge badge-amber">待处理</span></td><td class="cell-actions"><button class="btn btn-primary btn-xs">转客户</button><button class="btn btn-ghost btn-xs">详情</button></td></tr>
+              <tr><td><input type="checkbox" class="checkbox-custom"></td><td class="cell-link cell-truncate" style="max-width:220px" title="台山市2026年学校运动场改造工程建材采购">台山市2026年学校运动场改造工程建材采购</td><td class="cell-secondary">台山市教育局</td><td><span class="badge badge-slate">广东省政府采购网</span></td><td class="cell-muted">2026-07-04</td><td>¥ 135万</td><td><span class="badge badge-amber">待处理</span></td><td class="cell-actions"><button class="btn btn-primary btn-xs">转客户</button><button class="btn btn-ghost btn-xs">详情</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination">
+          <div class="pagination-left">
+            <span class="pagination-info">显示 <strong>1–8</strong>，共 <strong>56</strong> 条</span>
+            <select class="page-size-select" onchange="updatePageSize(this.value, 'leads-count')">
+              <option value="10">10 条/页</option><option value="20">20 条/页</option><option value="50">50 条/页</option>
+            </select>
+          </div>
+          <div class="pagination-pages">
+            <button class="active">1</button><button>2</button><button>3</button><button>…</button><button>7</button><button>→</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         Scraper Control
+         ============================================================ -->
+    <div class="view" id="view-scraper">
+      <div class="toolbar">
+        <span class="toolbar-title">爬虫控制</span>
+        <span class="toolbar-meta">自动采集：每日 08:00</span>
+      </div>
+
+      <div class="scraper-grid">
+        <div class="scraper-card">
+          <div class="scraper-card-header">
+            <h3>中国政府采购网</h3>
+            <span class="badge badge-green"><span class="status-dot online"></span>正常</span>
+          </div>
+          <div class="scraper-card-meta">
+            <div class="meta-row"><span class="meta-label">上次采集</span><span class="meta-value">2026-07-09 08:02</span></div>
+            <div class="meta-row"><span class="meta-label">采集结果</span><span class="meta-value" style="color:var(--green)">12 条新线索</span></div>
+            <div class="meta-row"><span class="meta-label">累计采集</span><span class="meta-value">1,247 条</span></div>
+          </div>
+          <button class="btn btn-primary" style="margin-top:10px;width:100%;justify-content:center">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            立即采集
+          </button>
+        </div>
+        <div class="scraper-card">
+          <div class="scraper-card-header">
+            <h3>广东省政府采购网</h3>
+            <span class="badge badge-green"><span class="status-dot online"></span>正常</span>
+          </div>
+          <div class="scraper-card-meta">
+            <div class="meta-row"><span class="meta-label">上次采集</span><span class="meta-value">2026-07-09 08:05</span></div>
+            <div class="meta-row"><span class="meta-label">采集结果</span><span class="meta-value" style="color:var(--green)">8 条新线索</span></div>
+            <div class="meta-row"><span class="meta-label">累计采集</span><span class="meta-value">893 条</span></div>
+          </div>
+          <button class="btn btn-primary" style="margin-top:10px;width:100%;justify-content:center">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            立即采集
+          </button>
+        </div>
+      </div>
+
+      <div class="scraper-config">
+        <div class="config-row">
+          <label>数据源</label>
+          <select><option>中国政府采购网 (ccgp)</option><option>广东省政府采购网 (gdgpo)</option></select>
+          <label style="margin-left:12px">采集页数</label>
+          <input type="number" value="3" min="1" max="20">
+          <label style="margin-left:12px">关键词</label>
+          <div class="tag-input-area">
+            <span class="tag-chip">水泥 <span class="tag-close">×</span></span>
+            <span class="tag-chip">钢材 <span class="tag-close">×</span></span>
+            <span class="tag-chip">建材 <span class="tag-close">×</span></span>
+            <span class="tag-chip">混凝土 <span class="tag-close">×</span></span>
+            <span style="color:var(--text-muted);font-size:11px;padding:1px 3px">+ 添加</span>
+          </div>
+          <button class="btn btn-primary" style="margin-left:8px">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            开始采集
+          </button>
+        </div>
+      </div>
+
+      <div class="section-card-full">
+        <div class="section-card-header">
+          <h3><span class="dot"></span>任务历史</h3>
+          <span class="text-xs text-muted">最近 10 条</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>任务ID</th><th>数据源</th><th>状态</th><th>页数</th><th>新增</th><th>开始时间</th><th>耗时</th></tr></thead>
+            <tbody>
+              <tr><td class="cell-muted">#T0247</td><td>中国政府采购网</td><td><span class="badge badge-green">成功</span></td><td>3</td><td style="color:var(--green)">12</td><td class="cell-muted">2026-07-09 08:00</td><td class="cell-muted">32s</td></tr>
+              <tr><td class="cell-muted">#T0246</td><td>广东省政府采购网</td><td><span class="badge badge-green">成功</span></td><td>3</td><td style="color:var(--green)">8</td><td class="cell-muted">2026-07-09 08:00</td><td class="cell-muted">28s</td></tr>
+              <tr><td class="cell-muted">#T0245</td><td>中国政府采购网</td><td><span class="badge badge-green">成功</span></td><td>3</td><td style="color:var(--green)">9</td><td class="cell-muted">2026-07-08 08:00</td><td class="cell-muted">35s</td></tr>
+              <tr><td class="cell-muted">#T0244</td><td>广东省政府采购网</td><td><span class="badge badge-red">失败</span></td><td>3</td><td class="cell-muted">—</td><td class="cell-muted">2026-07-08 08:00</td><td class="cell-muted">12s</td></tr>
+              <tr><td class="cell-muted">#T0243</td><td>中国政府采购网</td><td><span class="badge badge-green">成功</span></td><td>3</td><td style="color:var(--green)">15</td><td class="cell-muted">2026-07-07 08:00</td><td class="cell-muted">41s</td></tr>
+              <tr><td class="cell-muted">#T0242</td><td>广东省政府采购网</td><td><span class="badge badge-green">成功</span></td><td>3</td><td style="color:var(--green)">6</td><td class="cell-muted">2026-07-07 08:00</td><td class="cell-muted">25s</td></tr>
+              <tr><td class="cell-muted">#T0241</td><td>中国政府采购网</td><td><span class="badge badge-green">成功</span></td><td>3</td><td style="color:var(--green)">11</td><td class="cell-muted">2026-07-06 08:00</td><td class="cell-muted">38s</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</main>
+
+<script>
+function switchView(viewName, el) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('view-' + viewName).classList.add('active');
+  if (el) el.classList.add('active');
+  const labels = { dashboard: '仪表盘', customers: '客户管理', leads: '线索管理', scraper: '爬虫控制' };
+  document.getElementById('breadcrumb-label').textContent = labels[viewName] || viewName;
+}
+
+function updatePageSize(val, id) {
+  // demo — in real app this would trigger a data reload
+  console.log('Page size changed to:', val);
+}
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    String(now.getHours()).padStart(2,'0') + ':' +
+    String(now.getMinutes()).padStart(2,'0') + ':' +
+    String(now.getSeconds()).padStart(2,'0');
+}
+updateClock();
+setInterval(updateClock, 1000);
+</script>
+</body>
+</html>

@@ -2,164 +2,178 @@
 {% from "macros.html" import status_badge %}
 
 {% block title %}客户管理 - 鸿图建材获客工具{% endblock %}
-{% block page_title %}客户管理{% endblock %}
+{% block breadcrumb %}客户管理{% endblock %}
 
-{% block content %}
-<!-- 工具栏 -->
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-    <h5 class="mb-0">客户列表 <small class="text-muted">共 {{ pagination.total }} 条</small></h5>
-    <div class="d-flex gap-2 flex-wrap">
-        <a href="{{ url_for('customers.create') }}" class="btn btn-primary">
-            <i class="bi bi-plus-lg"></i> 新增客户
-        </a>
-        <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#importModal">
-            <i class="bi bi-upload"></i> 导入Excel
-        </button>
-        <a href="{{ url_for('customers.export') }}" class="btn btn-outline-primary">
-            <i class="bi bi-download"></i> 导出Excel
-        </a>
-    </div>
-</div>
+{% block content_wrapper %}
+<div class="content-fill">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'success' if category == 'success' else 'danger' if category == 'error' else 'warning' if category == 'warning' else 'info' }}" role="alert">
+                    <span>{{ message }}</span>
+                    <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
 
-<!-- 筛选栏 -->
-<form method="GET" class="card card-body bg-light mb-3" id="filterForm">
-    <div class="row g-2 align-items-end">
-        <div class="col-md-2">
-            <label class="form-label small text-muted">状态</label>
-            <select name="status" class="form-select form-select-sm" onchange="document.getElementById('filterForm').submit()">
-                <option value="">全部</option>
-                {% for s in status_choices %}
-                <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-2">
-            <label class="form-label small text-muted">行业</label>
-            <select name="industry" class="form-select form-select-sm" onchange="document.getElementById('filterForm').submit()">
-                <option value="">全部</option>
-                {% for i in industry_choices %}
-                <option value="{{ i }}" {% if industry == i %}selected{% endif %}>{{ i }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-2">
-            <label class="form-label small text-muted">来源</label>
-            <select name="source" class="form-select form-select-sm" onchange="document.getElementById('filterForm').submit()">
-                <option value="">全部</option>
-                {% for s in source_choices %}
-                <option value="{{ s }}" {% if source == s %}selected{% endif %}>{{ s }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-4">
-            <label class="form-label small text-muted">搜索</label>
-            <input type="text" name="q" value="{{ q }}" class="form-control form-control-sm"
-                   placeholder="搜索公司名 / 联系人 / 电话">
-        </div>
-        <div class="col-md-2">
-            <button type="submit" class="btn btn-primary btn-sm w-100">
-                <i class="bi bi-search"></i> 查询
+    <!-- 工具栏 -->
+    <div class="toolbar">
+        <span class="toolbar-title">客户管理</span>
+        <div class="toolbar-actions">
+            <a href="{{ url_for('customers.create') }}" class="btn btn-primary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                新增客户
+            </a>
+            <button class="btn btn-secondary" id="btn-import" onclick="openModal('importModal')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                导入 Excel
             </button>
+            <a href="{{ url_for('customers.export') }}" class="btn btn-secondary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                导出 Excel
+            </a>
         </div>
     </div>
-</form>
 
-<!-- 客户表格 -->
-<div class="card border-0 shadow-sm">
-    <div class="table-responsive">
-        <table class="table table-hover mb-0 align-middle">
-            <thead class="table-light">
-                <tr>
-                    <th style="width: 50px;">序号</th>
-                    <th>公司名称</th>
-                    <th>联系人</th>
-                    <th>电话</th>
-                    <th>行业</th>
-                    <th>来源</th>
-                    <th>状态</th>
-                    <th>创建时间</th>
-                    <th style="width: 200px;">操作</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for c in customers %}
-                <tr>
-                    <td class="text-muted">{{ (pagination.page - 1) * pagination.per_page + loop.index }}</td>
-                    <td>
-                        <a href="{{ url_for('customers.detail', id=c.id) }}" class="text-decoration-none fw-semibold">
-                            {{ c.company_name }}
-                        </a>
-                    </td>
-                    <td>{{ c.contact_person or '-' }}</td>
-                    <td>{{ c.phone or '-' }}</td>
-                    <td>{{ c.industry_type or '-' }}</td>
-                    <td>{{ c.source or '-' }}</td>
-                    <td>{{ status_badge(c.status) }}</td>
-                    <td class="text-muted small">{{ c.created_at.strftime('%Y-%m-%d') if c.created_at else '-' }}</td>
-                    <td>
-                        <a href="{{ url_for('customers.detail', id=c.id) }}" class="btn btn-sm btn-outline-primary">详情</a>
-                        <a href="{{ url_for('customers.edit', id=c.id) }}" class="btn btn-sm btn-outline-secondary">编辑</a>
-                        <form method="POST" action="{{ url_for('customers.delete', id=c.id) }}" class="d-inline delete-form">
-                            <button type="submit" class="btn btn-sm btn-outline-danger" data-customer="{{ c.company_name }}">删除</button>
-                        </form>
-                    </td>
-                </tr>
+    <!-- 筛选栏 -->
+    <form method="GET" class="filter-bar" id="filterForm">
+        <div class="filter-row">
+            <div>
+                <span class="filter-label">状态</span>
+                <select name="status" class="filter-select" onchange="document.getElementById('filterForm').submit()">
+                    <option value="">全部</option>
+                    {% for s in status_choices %}
+                    <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <span class="filter-label">行业</span>
+                <select name="industry" class="filter-select" onchange="document.getElementById('filterForm').submit()">
+                    <option value="">全部</option>
+                    {% for i in industry_choices %}
+                    <option value="{{ i }}" {% if industry == i %}selected{% endif %}>{{ i }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <span class="filter-label">来源</span>
+                <select name="source" class="filter-select" onchange="document.getElementById('filterForm').submit()">
+                    <option value="">全部</option>
+                    {% for s in source_choices %}
+                    <option value="{{ s }}" {% if source == s %}selected{% endif %}>{{ s }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="flex:1;min-width:160px">
+                <span class="filter-label">搜索</span>
+                <input type="text" name="q" value="{{ q }}" class="search-input" placeholder="搜索公司名 / 联系人 / 电话">
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">查询</button>
+            <span class="text-sm text-muted ml-auto">共 {{ pagination.total }} 条</span>
+        </div>
+    </form>
+
+    <!-- 表格 -->
+    <div class="card-fill">
+        <div class="table-wrap">
+            <table>
+                <thead><tr>
+                    <th style="width:40px">#</th>
+                    <th>公司名称</th><th>联系人</th><th>电话</th><th>行业</th><th>来源</th><th>状态</th><th>创建时间</th><th style="width:160px">操作</th>
+                </tr></thead>
+                <tbody>
+                    {% for c in customers %}
+                    <tr>
+                        <td class="cell-muted">{{ (pagination.page - 1) * pagination.per_page + loop.index }}</td>
+                        <td><a href="{{ url_for('customers.detail', id=c.id) }}" class="cell-link fw-semibold">{{ c.company_name }}</a></td>
+                        <td>{{ c.contact_person or '-' }}</td>
+                        <td class="cell-mono">{{ c.phone or '-' }}</td>
+                        <td>{{ c.industry_type or '-' }}</td>
+                        <td>{{ c.source or '-' }}</td>
+                        <td>{{ status_badge(c.status) }}</td>
+                        <td class="cell-muted">{{ c.created_at.strftime('%Y-%m-%d') if c.created_at else '-' }}</td>
+                        <td class="cell-actions">
+                            <a href="{{ url_for('customers.detail', id=c.id) }}" class="btn btn-ghost btn-xs">详情</a>
+                            <a href="{{ url_for('customers.edit', id=c.id) }}" class="btn btn-ghost btn-xs">编辑</a>
+                            <form method="POST" action="{{ url_for('customers.delete', id=c.id) }}" class="d-inline delete-form">
+                                <button type="submit" class="btn btn-ghost btn-xs" style="color:var(--red)" data-customer="{{ c.company_name }}">删除</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="9" class="empty-row">暂无客户数据，点击"新增客户"开始添加</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if pagination.pages > 1 %}
+        <div class="pagination">
+            <div class="pagination-left">
+                <span class="pagination-info">显示 <strong>{{ (pagination.page - 1) * pagination.per_page + 1 }}–{{ [(pagination.page * pagination.per_page), pagination.total] | min }}</strong>，共 <strong>{{ pagination.total }}</strong> 条</span>
+                <select class="page-size-select" name="per_page" onchange="changePageSize(this.value)">
+                    <option value="20" {% if pagination.per_page == 20 %}selected{% endif %}>20 条/页</option>
+                    <option value="50" {% if pagination.per_page == 50 %}selected{% endif %}>50 条/页</option>
+                    <option value="100" {% if pagination.per_page == 100 %}selected{% endif %}>100 条/页</option>
+                </select>
+            </div>
+            <div class="pagination-pages">
+                {% if pagination.has_prev %}
+                <a href="{{ url_for('customers.index', page=pagination.prev_num, status=status, industry=industry, source=source, q=q, per_page=pagination.per_page) }}">←</a>
                 {% else %}
-                <tr>
-                    <td colspan="9" class="text-center text-muted py-5">
-                        <i class="bi bi-inbox" style="font-size: 2rem;"></i>
-                        <p class="mt-2 mb-0">暂无客户数据，点击"新增客户"开始添加</p>
-                    </td>
-                </tr>
+                <span class="disabled">←</span>
+                {% endif %}
+                {% for p in range(1, pagination.pages + 1) %}
+                    {% if p == pagination.page %}
+                    <a class="active">{{ p }}</a>
+                    {% elif p <= 3 or p > pagination.pages - 3 or (p >= pagination.page - 1 and p <= pagination.page + 1) %}
+                    <a href="{{ url_for('customers.index', page=p, status=status, industry=industry, source=source, q=q, per_page=pagination.per_page) }}">{{ p }}</a>
+                    {% elif p == 4 or p == pagination.pages - 3 %}
+                    <span>…</span>
+                    {% endif %}
                 {% endfor %}
-            </tbody>
-        </table>
+                {% if pagination.has_next %}
+                <a href="{{ url_for('customers.index', page=pagination.next_num, status=status, industry=industry, source=source, q=q, per_page=pagination.per_page) }}">→</a>
+                {% else %}
+                <span class="disabled">→</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
-</div>
 
-<!-- 分页 -->
-{% if pagination.pages > 1 %}
-<nav class="mt-3">
-    <ul class="pagination justify-content-center">
-        <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
-            <a class="page-link" href="{{ url_for('customers.index', page=pagination.prev_num, status=status, industry=industry, source=source, q=q) }}">
-                <i class="bi bi-chevron-left"></i>
-            </a>
-        </li>
-        {% for p in range(1, pagination.pages + 1) %}
-        <li class="page-item {% if p == pagination.page %}active{% endif %}">
-            <a class="page-link" href="{{ url_for('customers.index', page=p, status=status, industry=industry, source=source, q=q) }}">{{ p }}</a>
-        </li>
-        {% endfor %}
-        <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
-            <a class="page-link" href="{{ url_for('customers.index', page=pagination.next_num, status=status, industry=industry, source=source, q=q) }}">
-                <i class="bi bi-chevron-right"></i>
-            </a>
-        </li>
-    </ul>
-</nav>
-{% endif %}
-
-<!-- 导入Excel模态框 -->
-<div class="modal fade" id="importModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
+    <!-- 导入Excel模态框 -->
+    <div class="modal-overlay d-none" id="importModal">
+        <div class="modal-panel">
             <form method="POST" action="{{ url_for('customers.import_excel') }}" enctype="multipart/form-data" id="importForm">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-upload"></i> 导入Excel客户</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <h3>导入 Excel 客户</h3>
+                    <button type="button" class="alert-close" onclick="closeModal('importModal')">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted">请选择 <code>.xlsx</code> 格式的Excel文件，第一行须为表头。</p>
-                    <p class="text-muted small mb-2">支持的列：公司名称(必填)、联系人、电话、地址、行业类型、来源、状态、备注</p>
+                    <p>请选择 <code>.xlsx</code> 格式的Excel文件，第一行须为表头。</p>
+                    <p class="text-sm">支持的列：公司名称(必填)、联系人、电话、地址、行业类型、来源、状态、备注</p>
                     <input type="file" name="file" accept=".xlsx,.xls" class="form-control" required>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('importModal')">取消</button>
                     <button type="submit" class="btn btn-primary">开始导入</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function changePageSize(size) {
+    var url = new URL(window.location.href);
+    url.searchParams.set('per_page', size);
+    url.searchParams.set('page', 1);
+    window.location.href = url.toString();
+}
+</script>
 {% endblock %}

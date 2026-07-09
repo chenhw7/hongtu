@@ -1,266 +1,230 @@
 {% extends 'base.html' %}
 
 {% block title %}线索管理 - 鸿图建材获客工具{% endblock %}
-{% block page_title %}线索管理{% endblock %}
+{% block breadcrumb %}线索管理{% endblock %}
 
-{% block content %}
-<div class="page-header">
-  <h2><i class="bi bi-list-task"></i> 线索管理</h2>
-  <div class="d-flex gap-2">
-    <a href="{{ url_for('leads.export') }}?{{ request.query_string.decode() }}" class="btn btn-success btn-sm">
-      <i class="bi bi-file-earmark-excel"></i> 导出Excel
-    </a>
-  </div>
-</div>
-
-<!-- 筛选栏 -->
-<div class="filter-bar">
-  <form method="GET" action="{{ url_for('leads.index') }}" class="row g-2 align-items-end">
-    <div class="col-auto">
-      <label class="form-label mb-1">来源类型</label>
-      <select name="source_type" class="form-select form-select-sm">
-        <option value="">全部</option>
-        <option value="ccgp" {{ 'selected' if source_type == 'ccgp' }}>ccgp（中国政府采购网）</option>
-        <option value="gdgpo" {{ 'selected' if source_type == 'gdgpo' }}>gdgpo（广东政府采购网）</option>
-      </select>
-    </div>
-    <div class="col-auto">
-      <label class="form-label mb-1">公告类型</label>
-      <select name="announcement_type" class="form-select form-select-sm">
-        <option value="">全部</option>
-        {% for t in announcement_types %}
-        <option value="{{ t }}" {{ 'selected' if announcement_type == t }}>{{ t }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-auto">
-      <label class="form-label mb-1">地域</label>
-      <select name="region" class="form-select form-select-sm">
-        <option value="">全部</option>
-        {% for r in regions %}
-        <option value="{{ r }}" {{ 'selected' if region == r }}>{{ r }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-auto">
-      <label class="form-label mb-1">发布日期起</label>
-      <input type="date" name="date_from" class="form-control form-control-sm" value="{{ date_from or '' }}">
-    </div>
-    <div class="col-auto">
-      <label class="form-label mb-1">至</label>
-      <input type="date" name="date_to" class="form-control form-control-sm" value="{{ date_to or '' }}">
-    </div>
-    <div class="col-auto">
-      <label class="form-label mb-1">转化状态</label>
-      <select name="is_converted" class="form-select form-select-sm">
-        <option value="">全部</option>
-        <option value="0" {{ 'selected' if is_converted == '0' }}>未转化</option>
-        <option value="1" {{ 'selected' if is_converted == '1' }}>已转化</option>
-      </select>
-    </div>
-    <div class="col-auto">
-      <label class="form-label mb-1">关键词搜索</label>
-      <input type="text" name="q" class="form-control form-control-sm" placeholder="项目名称/采购单位/联系人" value="{{ q or '' }}">
-    </div>
-    <div class="col-auto d-flex gap-2">
-      <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-search"></i> 筛选</button>
-      <a href="{{ url_for('leads.index') }}" class="btn btn-outline-secondary btn-sm">重置</a>
-    </div>
-  </form>
-</div>
-
-<!-- 批量操作表单 -->
-<form method="POST" action="{{ url_for('leads.batch_convert') }}" id="batchForm">
-  <!-- 批量操作工具栏 -->
-  <div class="d-flex justify-content-between align-items-center mb-2">
-    <div class="d-flex align-items-center gap-2">
-      <span class="text-muted small">已选择 <span id="selectedCount">0</span> 条</span>
-      <button type="submit" class="btn btn-success btn-sm" id="batchBtn" onclick="return confirm('确认将选中的线索批量转化为客户？')">
-        <i class="bi bi-people"></i> 批量转客户
-      </button>
-    </div>
-  </div>
-
-  <!-- 线索表格 -->
-  <div class="table-card">
-    <div class="table-responsive">
-      <table class="table table-hover mb-0 align-middle">
-        <thead>
-          <tr>
-            <th style="width: 36px;">
-              <input type="checkbox" class="form-check-input" id="selectAll" onclick="toggleAll(this)">
-            </th>
-            <th style="width: 40px;">#</th>
-            <th>招标编号</th>
-            <th>项目名称</th>
-            <th>采购单位</th>
-            <th>联系人</th>
-            <th>电话</th>
-            <th>预算金额(元)</th>
-            <th>发布日期</th>
-            <th>截止日期</th>
-            <th>来源</th>
-            <th>状态</th>
-            <th style="width: 160px;">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for lead in leads.items %}
-          <tr class="{{ 'row-converted' if lead.is_converted }}">
-            <td>
-              {% if not lead.is_converted %}
-              <input type="checkbox" name="lead_ids" value="{{ lead.id }}" class="form-check-input row-check" onclick="updateCount()">
-              {% else %}
-              <input type="checkbox" class="form-check-input" disabled>
-              {% endif %}
-            </td>
-            <td>{{ lead.id }}</td>
-            <td>
-              <span class="small text-muted">{{ lead.bidding_number or '—' }}</span>
-            </td>
-            <td>
-              <a href="{{ url_for('leads.detail', id=lead.id) }}" class="text-decoration-none" title="{{ lead.project_name or '' }}">
-                <span class="text-truncate-2">{{ lead.project_name or '—' }}</span>
-              </a>
-              {% if lead.announcement_type %}
-              <div><span class="badge bg-light text-dark border small">{{ lead.announcement_type }}</span></div>
-              {% endif %}
-            </td>
-            <td>
-              {{ lead.buyer_name or '—' }}
-              {% if lead.region %}
-              <div class="text-muted small"><i class="bi bi-geo-alt"></i> {{ lead.region }}</div>
-              {% endif %}
-            </td>
-            <td>{{ lead.contact_person or '—' }}</td>
-            <td>{{ lead.phone or '—' }}</td>
-            <td class="text-end">
-              {% if lead.budget_amount %}
-                {{ '{:,.2f}'.format(lead.budget_amount) }}
-              {% else %}
-                —
-              {% endif %}
-            </td>
-            <td>{{ lead.publish_date.strftime('%Y-%m-%d') if lead.publish_date else '—' }}</td>
-            <td>
-              {% if lead.deadline %}
-                {% if lead.deadline < today %}
-                  <span class="text-danger fw-bold">{{ lead.deadline.strftime('%Y-%m-%d') }}</span>
-                  <i class="bi bi-exclamation-circle text-danger" title="已截止"></i>
-                {% else %}
-                  {{ lead.deadline.strftime('%Y-%m-%d') }}
-                {% endif %}
-              {% else %}
-                —
-              {% endif %}
-            </td>
-            <td>
-              {% if lead.source_type == 'ccgp' %}
-                <span class="badge bg-primary">ccgp</span>
-              {% elif lead.source_type == 'gdgpo' %}
-                <span class="badge bg-success">gdgpo</span>
-              {% else %}
-                <span class="badge bg-secondary">{{ lead.source_type or '未知' }}</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if lead.is_converted %}
-                <span class="badge badge-status-converted">已转化</span>
-              {% else %}
-                <span class="badge badge-status-pending">待处理</span>
-              {% endif %}
-            </td>
-            <td>
-              <div class="btn-group btn-group-sm">
-                <a href="{{ url_for('leads.detail', id=lead.id) }}" class="btn btn-outline-secondary" title="详情">
-                  <i class="bi bi-eye"></i>
-                </a>
-                {% if not lead.is_converted %}
-                <button type="submit" formaction="{{ url_for('leads.convert', id=lead.id) }}"
-                        class="btn btn-outline-success" title="一键转客户"
-                        onclick="return confirm('确认将此线索转化为客户？')">
-                  <i class="bi bi-person-plus"></i>
-                </button>
-                {% else %}
-                <span class="badge bg-light text-success border" title="已转化为客户">
-                  <i class="bi bi-check2-circle"></i>
-                </span>
-                {% endif %}
-                {% if lead.source_url %}
-                <a href="{{ lead.source_url }}" target="_blank" class="btn btn-outline-primary" title="查看原文">
-                  <i class="bi bi-box-arrow-up-right"></i>
-                </a>
-                {% endif %}
-              </div>
-            </td>
-          </tr>
-          {% else %}
-          <tr>
-            <td colspan="13" class="text-center text-muted py-5">
-              <i class="bi bi-inbox" style="font-size: 2.5rem;"></i>
-              <p class="mt-3 mb-0">暂无线索数据</p>
-              <p class="small">请前往「爬虫控制」页面运行采集任务</p>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</form>
-
-<!-- 分页 -->
-{% if leads.pages > 1 %}
-<div class="pagination-wrapper">
-  <nav>
-    <ul class="pagination pagination-sm">
-      <li class="page-item {{ 'disabled' if not leads.has_prev }}">
-        <a class="page-link" href="{{ url_for('leads.index', page=leads.prev_num, **query_args) if leads.has_prev else '#' }}">&laquo;</a>
-      </li>
-      {% for p in leads.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
-        {% if p %}
-          <li class="page-item {{ 'active' if p == leads.page }}">
-            <a class="page-link" href="{{ url_for('leads.index', page=p, **query_args) }}">{{ p }}</a>
-          </li>
-        {% else %}
-          <li class="page-item disabled"><span class="page-link">...</span></li>
+{% block content_wrapper %}
+<div class="content-fill">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'success' if category == 'success' else 'danger' if category == 'error' else 'warning' if category == 'warning' else 'info' }}" role="alert">
+                    <span>{{ message }}</span>
+                    <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
+                </div>
+            {% endfor %}
         {% endif %}
-      {% endfor %}
-      <li class="page-item {{ 'disabled' if not leads.has_next }}">
-        <a class="page-link" href="{{ url_for('leads.index', page=leads.next_num, **query_args) if leads.has_next else '#' }}">&raquo;</a>
-      </li>
-    </ul>
-  </nav>
-</div>
-{% endif %}
+    {% endwith %}
 
-<!-- 统计信息 -->
-<div class="text-center text-muted small mt-2">
-  共 {{ leads.total }} 条线索，第 {{ leads.page }} / {{ leads.pages }} 页
+    <!-- 工具栏 -->
+    <div class="toolbar">
+        <span class="toolbar-title">线索管理</span>
+        <div class="toolbar-actions">
+            <a href="{{ url_for('leads.export') }}?{{ request.query_string.decode() }}" class="btn btn-secondary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                导出 Excel
+            </a>
+        </div>
+    </div>
+
+    <!-- 筛选栏 -->
+    <div class="filter-bar">
+        <form method="GET" action="{{ url_for('leads.index') }}" class="filter-row">
+            <div>
+                <span class="filter-label">来源类型</span>
+                <select name="source_type" class="filter-select">
+                    <option value="">全部</option>
+                    <option value="ccgp" {{ 'selected' if source_type == 'ccgp' }}>ccgp（中国政府采购网）</option>
+                    <option value="gdgpo" {{ 'selected' if source_type == 'gdgpo' }}>gdgpo（广东政府采购网）</option>
+                </select>
+            </div>
+            <div>
+                <span class="filter-label">公告类型</span>
+                <select name="announcement_type" class="filter-select">
+                    <option value="">全部</option>
+                    {% for t in announcement_types %}
+                    <option value="{{ t }}" {{ 'selected' if announcement_type == t }}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <span class="filter-label">地域</span>
+                <select name="region" class="filter-select">
+                    <option value="">全部</option>
+                    {% for r in regions %}
+                    <option value="{{ r }}" {{ 'selected' if region == r }}>{{ r }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <span class="filter-label">发布日期起</span>
+                <input type="date" name="date_from" class="search-input" style="width:130px" value="{{ date_from or '' }}">
+            </div>
+            <div>
+                <span class="filter-label">至</span>
+                <input type="date" name="date_to" class="search-input" style="width:130px" value="{{ date_to or '' }}">
+            </div>
+            <div>
+                <span class="filter-label">转化状态</span>
+                <select name="is_converted" class="filter-select">
+                    <option value="">全部</option>
+                    <option value="0" {{ 'selected' if is_converted == '0' }}>未转化</option>
+                    <option value="1" {{ 'selected' if is_converted == '1' }}>已转化</option>
+                </select>
+            </div>
+            <div style="flex:1;min-width:150px">
+                <span class="filter-label">关键词搜索</span>
+                <input type="text" name="q" class="search-input" placeholder="项目名称/采购单位/联系人" value="{{ q or '' }}">
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">筛选</button>
+            <a href="{{ url_for('leads.index') }}" class="btn btn-ghost btn-sm">重置</a>
+        </form>
+    </div>
+
+    <!-- 批量操作表单 -->
+    <form method="POST" action="{{ url_for('leads.batch_convert') }}" id="batchForm" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+        <!-- 批量操作工具栏 -->
+        <div class="toolbar">
+            <div class="d-flex align-items-center gap-2">
+                <span class="text-sm text-muted">已选择 <strong id="selectedCount">0</strong> 条</span>
+                <button type="submit" class="btn btn-success btn-sm" id="batchBtn" onclick="return confirm('确认将选中的线索批量转化为客户？')">批量转客户</button>
+            </div>
+        </div>
+
+        <!-- 表格 -->
+        <div class="card-fill">
+            <div class="table-wrap">
+                <table>
+                    <thead><tr>
+                        <th style="width:30px"><input type="checkbox" class="checkbox-custom" id="selectAll" onclick="toggleAll(this)"></th>
+                        <th style="width:40px">#</th>
+                        <th>招标编号</th><th>项目名称</th><th>采购单位</th><th>联系人</th><th>电话</th><th>预算金额(元)</th><th>发布日期</th><th>截止日期</th><th>来源</th><th>状态</th><th style="width:130px">操作</th>
+                    </tr></thead>
+                    <tbody>
+                        {% for lead in leads.items %}
+                        <tr class="{{ 'row-converted' if lead.is_converted }}">
+                            <td>
+                                {% if not lead.is_converted %}
+                                <input type="checkbox" name="lead_ids" value="{{ lead.id }}" class="checkbox-custom row-check" onclick="updateCount()">
+                                {% else %}
+                                <input type="checkbox" class="checkbox-custom" disabled>
+                                {% endif %}
+                            </td>
+                            <td class="cell-muted">{{ lead.id }}</td>
+                            <td class="cell-muted">{{ lead.bidding_number or '—' }}</td>
+                            <td>
+                                <a href="{{ url_for('leads.detail', id=lead.id) }}" class="cell-link cell-truncate" style="max-width:200px" title="{{ lead.project_name or '' }}">{{ lead.project_name or '—' }}</a>
+                                {% if lead.announcement_type %}
+                                <div><span class="badge badge-slate text-xs">{{ lead.announcement_type }}</span></div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {{ lead.buyer_name or '—' }}
+                                {% if lead.region %}<div class="text-xs text-muted">{{ lead.region }}</div>{% endif %}
+                            </td>
+                            <td>{{ lead.contact_person or '—' }}</td>
+                            <td class="cell-mono">{{ lead.phone or '—' }}</td>
+                            <td class="text-end">
+                                {% if lead.budget_amount %}{{ '{:,.2f}'.format(lead.budget_amount) }}{% else %}—{% endif %}
+                            </td>
+                            <td class="cell-muted">{{ lead.publish_date.strftime('%Y-%m-%d') if lead.publish_date else '—' }}</td>
+                            <td>
+                                {% if lead.deadline %}
+                                    {% if lead.deadline < today %}
+                                    <span class="text-danger fw-bold">{{ lead.deadline.strftime('%Y-%m-%d') }}</span>
+                                    {% else %}
+                                    {{ lead.deadline.strftime('%Y-%m-%d') }}
+                                    {% endif %}
+                                {% else %}—{% endif %}
+                            </td>
+                            <td>
+                                {% if lead.source_type == 'ccgp' %}
+                                <span class="badge badge-accent">ccgp</span>
+                                {% elif lead.source_type == 'gdgpo' %}
+                                <span class="badge badge-green">gdgpo</span>
+                                {% else %}
+                                <span class="badge badge-slate">{{ lead.source_type or '未知' }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if lead.is_converted %}
+                                <span class="badge badge-green">已转化</span>
+                                {% else %}
+                                <span class="badge badge-amber">待处理</span>
+                                {% endif %}
+                            </td>
+                            <td class="cell-actions">
+                                <a href="{{ url_for('leads.detail', id=lead.id) }}" class="btn btn-ghost btn-xs">详情</a>
+                                {% if not lead.is_converted %}
+                                <button type="submit" formaction="{{ url_for('leads.convert', id=lead.id) }}"
+                                        class="btn btn-success btn-xs" onclick="return confirm('确认将此线索转化为客户？')">转客户</button>
+                                {% endif %}
+                                {% if lead.source_url %}
+                                <a href="{{ lead.source_url }}" target="_blank" class="btn btn-ghost btn-xs">原文</a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="13" class="empty-row">暂无线索数据<br><span class="text-xs">请前往「爬虫控制」页面运行采集任务</span></td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if leads.pages > 1 %}
+            <div class="pagination">
+                <div class="pagination-left">
+                    <span class="pagination-info">显示 <strong>{{ (leads.page - 1) * leads.per_page + 1 }}–{{ [(leads.page * leads.per_page), leads.total] | min }}</strong>，共 <strong>{{ leads.total }}</strong> 条</span>
+                    <select class="page-size-select" name="per_page" onchange="changePageSize(this.value)">
+                        <option value="20" {% if leads.per_page == 20 %}selected{% endif %}>20 条/页</option>
+                        <option value="50" {% if leads.per_page == 50 %}selected{% endif %}>50 条/页</option>
+                        <option value="100" {% if leads.per_page == 100 %}selected{% endif %}>100 条/页</option>
+                    </select>
+                </div>
+                <div class="pagination-pages">
+                    {% if leads.has_prev %}
+                    <a href="{{ url_for('leads.index', page=leads.prev_num, **query_args) }}">←</a>
+                    {% else %}
+                    <span class="disabled">←</span>
+                    {% endif %}
+                    {% for p in leads.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                        {% if p %}
+                        <a href="{{ url_for('leads.index', page=p, **query_args) }}" class="{% if p == leads.page %}active{% endif %}">{{ p }}</a>
+                        {% else %}
+                        <span>…</span>
+                        {% endif %}
+                    {% endfor %}
+                    {% if leads.has_next %}
+                    <a href="{{ url_for('leads.index', page=leads.next_num, **query_args) }}">→</a>
+                    {% else %}
+                    <span class="disabled">→</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </form>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-// 全选/取消全选
 function toggleAll(source) {
-  const checkboxes = document.querySelectorAll('.row-check');
-  checkboxes.forEach(cb => {
-    cb.checked = source.checked;
-  });
-  updateCount();
+    document.querySelectorAll('.row-check').forEach(function(cb) { cb.checked = source.checked; });
+    updateCount();
 }
-
-// 更新选中计数
 function updateCount() {
-  const checked = document.querySelectorAll('.row-check:checked');
-  document.getElementById('selectedCount').textContent = checked.length;
-  document.getElementById('batchBtn').disabled = checked.length === 0;
+    var count = document.querySelectorAll('.row-check:checked').length;
+    document.getElementById('selectedCount').textContent = count;
+    document.getElementById('batchBtn').disabled = count === 0;
 }
+document.addEventListener('DOMContentLoaded', function() { updateCount(); });
 
-// 页面加载时初始化
-document.addEventListener('DOMContentLoaded', function() {
-  updateCount();
-});
+function changePageSize(size) {
+    var url = new URL(window.location.href);
+    url.searchParams.set('per_page', size);
+    url.searchParams.set('page', 1);
+    window.location.href = url.toString();
+}
 </script>
 {% endblock %}

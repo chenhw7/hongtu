@@ -38,6 +38,7 @@ EXCEL_HEADER_MAP = {
 def index():
     """客户列表：支持状态/行业/来源筛选 + 搜索 + 分页"""
     page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', Config.PER_PAGE, type=int)
     status = request.args.get('status', '')
     industry = request.args.get('industry', '')
     source = request.args.get('source', '')
@@ -58,7 +59,7 @@ def index():
         ))
 
     pagination = query.order_by(Customer.created_at.desc()).paginate(
-        page=page, per_page=Config.PER_PAGE, error_out=False,
+        page=page, per_page=per_page, error_out=False,
     )
 
     return render_template(

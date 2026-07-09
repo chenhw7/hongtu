@@ -1,277 +1,159 @@
 {% extends 'base.html' %}
 
 {% block title %}线索详情 - {{ lead.project_name or '未命名' }}{% endblock %}
-{% block page_title %}线索详情{% endblock %}
+{% block breadcrumb %}<a href="{{ url_for('leads.index') }}">线索管理</a> <span style="margin:0 4px;color:#ccc;">/</span> 线索详情 #{{ lead.id }}{% endblock %}
 
 {% block content %}
-<!-- 面包屑导航 -->
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <nav aria-label="breadcrumb">
-    <ol class="breadcrumb mb-0">
-      <li class="breadcrumb-item"><a href="{{ url_for('leads.index') }}">线索管理</a></li>
-      <li class="breadcrumb-item active">线索详情 #{{ lead.id }}</li>
-    </ol>
-  </nav>
-  <a href="{{ url_for('leads.index') }}" class="btn btn-outline-secondary btn-sm">
-    <i class="bi bi-arrow-left"></i> 返回列表
-  </a>
+<div class="toolbar">
+    <a href="{{ url_for('leads.index') }}" class="btn btn-secondary btn-sm">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        返回列表
+    </a>
 </div>
 
-<div class="row">
-  <!-- 左侧：线索信息 -->
-  <div class="col-lg-8">
-    <div class="detail-card">
-      <div class="d-flex justify-content-between align-items-start mb-3">
-        <h5 class="mb-0"><i class="bi bi-info-circle"></i> 线索信息</h5>
-        <div>
-          {% if lead.is_converted %}
-            <span class="badge badge-status-converted fs-6">已转化</span>
-          {% else %}
-            <span class="badge badge-status-pending fs-6">待处理</span>
-          {% endif %}
-        </div>
-      </div>
-
-      <table class="table table-borderless">
-        <tbody>
-          <tr>
-            <td class="text-muted text-end" style="width: 120px;">招标编号</td>
-            <td class="fw-bold">{{ lead.bidding_number or '—' }}</td>
-          </tr>
-          <tr>
-            <td class="text-muted text-end">项目名称</td>
-            <td class="fw-bold">{{ lead.project_name or '—' }}</td>
-          </tr>
-          {% if lead.announcement_type %}
-          <tr>
-            <td class="text-muted text-end">公告类型</td>
-            <td><span class="badge bg-light text-dark border">{{ lead.announcement_type }}</span></td>
-          </tr>
-          {% endif %}
-          <tr>
-            <td class="text-muted text-end">采购单位</td>
-            <td>{{ lead.buyer_name or '—' }}</td>
-          </tr>
-          {% if lead.region %}
-          <tr>
-            <td class="text-muted text-end">地域</td>
-            <td><i class="bi bi-geo-alt"></i> {{ lead.region }}</td>
-          </tr>
-          {% endif %}
-          {% if lead.buyer_address %}
-          <tr>
-            <td class="text-muted text-end">采购单位地址</td>
-            <td>{{ lead.buyer_address }}</td>
-          </tr>
-          {% endif %}
-          <tr>
-            <td class="text-muted text-end">联系人</td>
-            <td>{{ lead.contact_person or '—' }}</td>
-          </tr>
-          <tr>
-            <td class="text-muted text-end">电话</td>
-            <td>{{ lead.phone or '—' }}</td>
-          </tr>
-          {% if lead.agency_name or lead.agency_phone %}
-          <tr>
-            <td class="text-muted text-end">采购代理机构</td>
-            <td>{{ lead.agency_name or '—' }}{% if lead.agency_phone %} （{{ lead.agency_phone }}）{% endif %}</td>
-          </tr>
-          {% endif %}
-          <tr>
-            <td class="text-muted text-end">预算金额</td>
-            <td>
-              {% if lead.budget_amount %}
-                <span class="fw-bold text-primary">{{ '{:,.2f}'.format(lead.budget_amount) }} 元</span>
-              {% else %}
-                —
-              {% endif %}
-            </td>
-          </tr>
-          <tr>
-            <td class="text-muted text-end">发布日期</td>
-            <td>
-              {% if lead.publish_date %}
-                {{ lead.publish_date.strftime('%Y-%m-%d') }}{% if lead.publish_time %} {{ lead.publish_time }}{% endif %}
-              {% else %}
-                —
-              {% endif %}
-            </td>
-          </tr>
-          <tr>
-            <td class="text-muted text-end">截止日期</td>
-            <td>
-              {% if lead.deadline %}
-                {% if lead.deadline < today %}
-                  <span class="text-danger fw-bold">
-                    {{ lead.deadline.strftime('%Y-%m-%d') }}
-                    <i class="bi bi-exclamation-triangle"></i> 已截止
-                  </span>
-                {% else %}
-                  {{ lead.deadline.strftime('%Y-%m-%d') }}
+<div class="d-flex gap-2 flex-wrap" style="gap:14px">
+    <!-- 左侧：线索信息 -->
+    <div style="flex:1;min-width:0">
+        <div class="detail-card">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <h5>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                    线索信息
+                </h5>
+                <div>
+                    {% if lead.is_converted %}
+                    <span class="badge badge-green">已转化</span>
+                    {% else %}
+                    <span class="badge badge-amber">待处理</span>
+                    {% endif %}
+                </div>
+            </div>
+            <table class="detail-table">
+                <tr><td class="label">招标编号</td><td class="value fw-bold">{{ lead.bidding_number or '—' }}</td></tr>
+                <tr><td class="label">项目名称</td><td class="value fw-bold">{{ lead.project_name or '—' }}</td></tr>
+                {% if lead.announcement_type %}
+                <tr><td class="label">公告类型</td><td class="value"><span class="badge badge-slate">{{ lead.announcement_type }}</span></td></tr>
                 {% endif %}
-              {% else %}
-                —
-              {% endif %}
-            </td>
-          </tr>
-          <tr>
-            <td class="text-muted text-end">来源</td>
-            <td>
-              {% if lead.source_type == 'ccgp' %}
-                <span class="badge bg-primary">ccgp（中国政府采购网）</span>
-              {% elif lead.source_type == 'gdgpo' %}
-                <span class="badge bg-success">gdgpo（广东政府采购网）</span>
-              {% else %}
-                <span class="badge bg-secondary">{{ lead.source_type or '未知' }}</span>
-              {% endif %}
-            </td>
-          </tr>
-          <tr>
-            <td class="text-muted text-end">来源URL</td>
-            <td>
-              {% if lead.source_url %}
-                <a href="{{ lead.source_url }}" target="_blank" class="text-decoration-none">
-                  {{ lead.source_url }} <i class="bi bi-box-arrow-up-right small"></i>
-                </a>
-              {% else %}
-                —
-              {% endif %}
-            </td>
-          </tr>
-          <tr>
-            <td class="text-muted text-end">采集时间</td>
-            <td>{{ lead.created_at.strftime('%Y-%m-%d %H:%M') if lead.created_at else '—' }}</td>
-          </tr>
-        </tbody>
-      </table>
+                <tr><td class="label">采购单位</td><td class="value">{{ lead.buyer_name or '—' }}</td></tr>
+                {% if lead.region %}
+                <tr><td class="label">地域</td><td class="value">{{ lead.region }}</td></tr>
+                {% endif %}
+                {% if lead.buyer_address %}
+                <tr><td class="label">采购单位地址</td><td class="value">{{ lead.buyer_address }}</td></tr>
+                {% endif %}
+                <tr><td class="label">联系人</td><td class="value">{{ lead.contact_person or '—' }}</td></tr>
+                <tr><td class="label">电话</td><td class="value">{{ lead.phone or '—' }}</td></tr>
+                {% if lead.agency_name or lead.agency_phone %}
+                <tr><td class="label">采购代理机构</td><td class="value">{{ lead.agency_name or '—' }}{% if lead.agency_phone %}（{{ lead.agency_phone }}）{% endif %}</td></tr>
+                {% endif %}
+                <tr><td class="label">预算金额</td><td class="value">
+                    {% if lead.budget_amount %}<span class="fw-bold" style="color:var(--accent)">{{ '{:,.2f}'.format(lead.budget_amount) }} 元</span>{% else %}—{% endif %}
+                </td></tr>
+                <tr><td class="label">发布日期</td><td class="value">
+                    {% if lead.publish_date %}{{ lead.publish_date.strftime('%Y-%m-%d') }}{% if lead.publish_time %} {{ lead.publish_time }}{% endif %}{% else %}—{% endif %}
+                </td></tr>
+                <tr><td class="label">截止日期</td><td class="value">
+                    {% if lead.deadline %}
+                        {% if lead.deadline < today %}<span class="text-danger fw-bold">{{ lead.deadline.strftime('%Y-%m-%d') }} ⚠ 已截止</span>
+                        {% else %}{{ lead.deadline.strftime('%Y-%m-%d') }}{% endif %}
+                    {% else %}—{% endif %}
+                </td></tr>
+                <tr><td class="label">来源</td><td class="value">
+                    {% if lead.source_type == 'ccgp' %}<span class="badge badge-accent">ccgp（中国政府采购网）</span>
+                    {% elif lead.source_type == 'gdgpo' %}<span class="badge badge-green">gdgpo（广东政府采购网）</span>
+                    {% else %}<span class="badge badge-slate">{{ lead.source_type or '未知' }}</span>{% endif %}
+                </td></tr>
+                <tr><td class="label">来源URL</td><td class="value">
+                    {% if lead.source_url %}<a href="{{ lead.source_url }}" target="_blank">{{ lead.source_url }}</a>{% else %}—{% endif %}
+                </td></tr>
+                <tr><td class="label">采集时间</td><td class="value">{{ lead.created_at.strftime('%Y-%m-%d %H:%M') if lead.created_at else '—' }}</td></tr>
+            </table>
+        </div>
+
+        <!-- 附件 -->
+        {% set attachment_list = lead.attachments.all() %}
+        {% if attachment_list %}
+        <div class="detail-card">
+            <h5>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                相关附件
+            </h5>
+            {% for att in attachment_list %}
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-sm">
+                    {{ att.file_name or '未命名附件' }}
+                    {% if att.download_status != '成功' %}<span class="badge badge-slate ms-1">{{ att.download_status }}</span>{% endif %}
+                </span>
+                {% if att.download_status == '成功' %}
+                <a href="{{ url_for('leads.download_attachment', id=lead.id, attachment_id=att.id) }}" class="btn btn-ghost btn-xs">下载</a>
+                {% elif att.file_url %}
+                <a href="{{ att.file_url }}" target="_blank" class="btn btn-ghost btn-xs">原文链接</a>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- 原始数据 -->
+        {% if lead.raw_data %}
+        <div class="detail-card">
+            <h5>原始数据</h5>
+            <pre style="background:#fafaf9;padding:12px;border-radius:6px;font-size:11px;max-height:300px;overflow-y:auto;white-space:pre-wrap;word-break:break-all"><code>{{ raw_data_json }}</code></pre>
+        </div>
+        {% endif %}
     </div>
 
-    <!-- 附件下载 -->
-    {% set attachment_list = lead.attachments.all() %}
-    {% if attachment_list %}
-    <div class="detail-card">
-      <h5><i class="bi bi-paperclip"></i> 相关附件</h5>
-      <ul class="list-group list-group-flush">
-        {% for att in attachment_list %}
-        <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-          <span>
-            <i class="bi bi-file-earmark"></i> {{ att.file_name or '未命名附件' }}
-            {% if att.download_status != '成功' %}
-              <span class="badge bg-secondary ms-1">{{ att.download_status }}</span>
+    <!-- 右侧：操作面板 -->
+    <div style="width:300px;flex-shrink:0">
+        <div class="detail-card">
+            <h5>操作</h5>
+            {% if lead.is_converted %}
+                <div class="text-center py-3">
+                    <span style="font-size:2.5rem">✅</span>
+                    <p class="mt-2 mb-1 fw-bold" style="color:var(--green)">该线索已转化为客户</p>
+                    <p class="text-sm text-muted">客户ID：{{ lead.converted_customer_id }}</p>
+                </div>
+                {% if lead.converted_customer_id %}
+                <a href="{{ url_for('customers.detail', id=lead.converted_customer_id) }}" class="btn btn-secondary w-100">查看客户</a>
+                {% endif %}
+            {% else %}
+                <div class="text-center py-3">
+                    <span style="font-size:2.5rem">📋</span>
+                    <p class="mt-2 mb-1">将此线索转化为客户</p>
+                    <p class="text-sm text-muted">采购单位将作为公司名自动创建客户记录</p>
+                </div>
+                <form method="POST" action="{{ url_for('leads.convert', id=lead.id) }}">
+                    <button type="submit" class="btn btn-success w-100" onclick="return confirm('确认将此线索转化为客户？')">一键转为客户</button>
+                </form>
             {% endif %}
-          </span>
-          {% if att.download_status == '成功' %}
-          <a href="{{ url_for('leads.download_attachment', id=lead.id, attachment_id=att.id) }}" class="btn btn-sm btn-outline-primary">
-            <i class="bi bi-download"></i> 下载
-          </a>
-          {% elif att.file_url %}
-          <a href="{{ att.file_url }}" target="_blank" class="btn btn-sm btn-outline-secondary">
-            <i class="bi bi-box-arrow-up-right"></i> 原文链接
-          </a>
-          {% endif %}
-        </li>
-        {% endfor %}
-      </ul>
-    </div>
-    {% endif %}
 
-    <!-- 原始数据 -->
-    {% if lead.raw_data %}
-    <div class="detail-card">
-      <h5><i class="bi bi-code-slash"></i> 原始数据</h5>
-      <pre class="bg-dark text-light p-3 rounded small" style="max-height: 400px; overflow-y: auto;"><code>{{ raw_data_json }}</code></pre>
-    </div>
-    {% endif %}
-  </div>
+            <hr class="form-divider">
 
-  <!-- 右侧：操作面板 -->
-  <div class="col-lg-4">
-    <div class="detail-card">
-      <h5><i class="bi bi-gear"></i> 操作</h5>
-
-      {% if lead.is_converted %}
-        <!-- 已转化状态 -->
-        <div class="text-center py-3">
-          <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
-          <p class="mt-2 mb-1 fw-bold text-success">该线索已转化为客户</p>
-          <p class="text-muted small">客户ID：{{ lead.converted_customer_id }}</p>
+            <div class="d-grid gap-2">
+                <a href="{{ url_for('leads.index') }}" class="btn btn-secondary btn-sm w-100">返回线索列表</a>
+                {% if lead.source_url %}
+                <a href="{{ lead.source_url }}" target="_blank" class="btn btn-ghost btn-sm w-100">查看原文页面</a>
+                {% endif %}
+                {% if lead.html_snapshot_path %}
+                <a href="{{ url_for('leads.snapshot', id=lead.id) }}" target="_blank" class="btn btn-ghost btn-sm w-100">查看本地快照</a>
+                {% endif %}
+            </div>
         </div>
-        <div class="d-grid gap-2">
-          {% if lead.converted_customer_id %}
-          <a href="{{ url_for('customers.detail', id=lead.converted_customer_id) }}" class="btn btn-outline-primary">
-            <i class="bi bi-person-lines-fill"></i> 查看客户
-          </a>
-          {% endif %}
-        </div>
-      {% else %}
-        <!-- 未转化状态 - 转客户按钮 -->
-        <div class="text-center py-3">
-          <i class="bi bi-arrow-right-circle text-primary" style="font-size: 3rem;"></i>
-          <p class="mt-2 mb-1">将此线索转化为客户</p>
-          <p class="text-muted small">采购单位将作为公司名自动创建客户记录</p>
-        </div>
-        <form method="POST" action="{{ url_for('leads.convert', id=lead.id) }}">
-          <div class="d-grid gap-2">
-            <button type="submit" class="btn btn-success btn-lg"
-                    onclick="return confirm('确认将此线索转化为客户？')"
-                    style="min-height: 44px;">
-              <i class="bi bi-person-plus"></i> 一键转为客户
-            </button>
-          </div>
-        </form>
-      {% endif %}
 
-      <hr class="my-3">
-
-      <div class="d-grid gap-2">
-        <a href="{{ url_for('leads.index') }}" class="btn btn-outline-secondary">
-          <i class="bi bi-arrow-left"></i> 返回线索列表
-        </a>
-        {% if lead.source_url %}
-        <a href="{{ lead.source_url }}" target="_blank" class="btn btn-outline-primary">
-          <i class="bi bi-box-arrow-up-right"></i> 查看原文页面
-        </a>
+        <!-- 转换预览 -->
+        {% if not lead.is_converted %}
+        <div class="detail-card">
+            <h5>转换预览</h5>
+            <p class="text-sm text-muted mb-3">转化后将自动创建以下客户信息：</p>
+            <table class="detail-table">
+                <tr><td class="label">公司名称</td><td class="value fw-bold">{{ lead.buyer_name or '（空）' }}</td></tr>
+                <tr><td class="label">联系人</td><td class="value">{{ lead.contact_person or '（空）' }}</td></tr>
+                <tr><td class="label">电话</td><td class="value">{{ lead.phone or '（空）' }}</td></tr>
+                <tr><td class="label">来源</td><td class="value"><span class="badge badge-accent">爬虫采集</span></td></tr>
+                <tr><td class="label">状态</td><td class="value"><span class="badge badge-amber">新线索</span></td></tr>
+            </table>
+        </div>
         {% endif %}
-        {% if lead.html_snapshot_path %}
-        <a href="{{ url_for('leads.snapshot', id=lead.id) }}" target="_blank" class="btn btn-outline-secondary">
-          <i class="bi bi-camera"></i> 查看本地快照
-        </a>
-        {% endif %}
-      </div>
     </div>
-
-    <!-- 转换预览 -->
-    {% if not lead.is_converted %}
-    <div class="detail-card">
-      <h5><i class="bi bi-eye"></i> 转换预览</h5>
-      <p class="text-muted small mb-3">转化后将自动创建以下客户信息：</p>
-      <table class="table table-sm table-borderless">
-        <tbody>
-          <tr>
-            <td class="text-muted">公司名称</td>
-            <td class="fw-bold">{{ lead.buyer_name or '（空）' }}</td>
-          </tr>
-          <tr>
-            <td class="text-muted">联系人</td>
-            <td>{{ lead.contact_person or '（空）' }}</td>
-          </tr>
-          <tr>
-            <td class="text-muted">电话</td>
-            <td>{{ lead.phone or '（空）' }}</td>
-          </tr>
-          <tr>
-            <td class="text-muted">来源</td>
-            <td><span class="badge bg-info">爬虫采集</span></td>
-          </tr>
-          <tr>
-            <td class="text-muted">状态</td>
-            <td><span class="badge bg-primary">新线索</span></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    {% endif %}
-  </div>
 </div>
 {% endblock %}

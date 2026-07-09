@@ -92,6 +92,7 @@ def _apply_filters(query):
 def index():
     """线索列表 - 支持筛选、搜索、分页"""
     page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', Config.PER_PAGE, type=int)
     source_type = request.args.get('source_type', '', type=str)
     is_converted = request.args.get('is_converted', '', type=str)
     q = request.args.get('q', '', type=str).strip()
@@ -103,7 +104,7 @@ def index():
     query = _apply_filters(Lead.query)
     query = query.order_by(Lead.publish_date.desc().nullslast(), Lead.created_at.desc())
 
-    pagination = query.paginate(page=page, per_page=Config.PER_PAGE, error_out=False)
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
     # 供筛选下拉框使用的公告类型/地域候选值（去重后按现有数据动态生成）
     announcement_types = [r[0] for r in db.session.query(Lead.announcement_type)
@@ -129,6 +130,7 @@ def index():
         query_args['announcement_type'] = announcement_type
     if region:
         query_args['region'] = region
+    query_args['per_page'] = per_page
 
     return render_template('leads/list.html',
                            leads=pagination,

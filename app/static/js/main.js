@@ -4,7 +4,6 @@
 document.addEventListener('DOMContentLoaded', function () {
 
     // ===== 1. 删除确认弹窗 =====
-    // 所有带 delete-form 类的表单提交时弹出确认
     document.addEventListener('submit', function (e) {
         if (e.target.classList.contains('delete-form')) {
             var btn = e.target.querySelector('[data-customer]');
@@ -16,7 +15,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // ===== 2. 表单必填验证 =====
-    // 所有带 needs-validation 类的表单使用 Bootstrap 原生验证
     document.addEventListener('submit', function (e) {
         var form = e.target;
         if (form.classList.contains('needs-validation')) {
@@ -25,6 +23,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 e.stopPropagation();
             }
             form.classList.add('was-validated');
+            // Highlight invalid fields
+            form.querySelectorAll('input:invalid, textarea:invalid, select:invalid').forEach(function(el) {
+                el.classList.add('form-invalid');
+            });
         }
     });
 
@@ -35,7 +37,6 @@ document.addEventListener('DOMContentLoaded', function () {
         if (fileInput) {
             fileInput.addEventListener('change', function () {
                 if (this.files && this.files.length > 0) {
-                    // 简单校验文件后缀
                     var name = this.files[0].name.toLowerCase();
                     if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
                         importForm.submit();
@@ -80,12 +81,44 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // ===== 5. Flash 消息自动消失 =====
-    var alerts = document.querySelectorAll('.alert-dismissible');
+    var alerts = document.querySelectorAll('.alert');
     alerts.forEach(function (alert) {
         setTimeout(function () {
-            var bsAlert = bootstrap.Alert.getOrCreateInstance(alert);
-            bsAlert.close();
+            if (alert.parentElement) {
+                alert.style.transition = 'opacity 0.2s';
+                alert.style.opacity = '0';
+                setTimeout(function() { if (alert.parentElement) alert.remove(); }, 200);
+            }
         }, 4000);
     });
 
+    // ===== 6. 实时时钟 =====
+    function updateClock() {
+        var el = document.getElementById('clock');
+        if (!el) return;
+        var now = new Date();
+        el.textContent =
+            String(now.getHours()).padStart(2, '0') + ':' +
+            String(now.getMinutes()).padStart(2, '0') + ':' +
+            String(now.getSeconds()).padStart(2, '0');
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+});
+
+// ===== Modal 函数 =====
+function openModal(id) {
+    var modal = document.getElementById(id);
+    if (modal) modal.classList.remove('d-none');
+}
+function closeModal(id) {
+    var modal = document.getElementById(id);
+    if (modal) modal.classList.add('d-none');
+}
+// 点击遮罩关闭
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('modal-overlay')) {
+        e.target.classList.add('d-none');
+    }
 });

@@ -4,50 +4,74 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}鸿图建材获客工具{% endblock %}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/custom.css') }}" rel="stylesheet">
 </head>
 <body>
     <!-- 侧边导航栏 -->
-    <div class="sidebar">
-        <div class="sidebar-brand">
-            <i class="bi bi-building-fill"></i>
-            <span>鸿图建材获客工具</span>
-        </div>
+    <aside class="sidebar">
+        <a href="{{ url_for('dashboard.index') }}" class="sidebar-brand">
+            <div class="logo-mark">鸿</div>
+            <div class="brand-text">鸿图建材<br>获客工具</div>
+        </a>
         <nav class="sidebar-nav">
             <a href="{{ url_for('dashboard.index') }}"
                class="sidebar-link {% if request.endpoint and request.endpoint.startswith('dashboard') %}active{% endif %}">
-                <i class="bi bi-speedometer2"></i><span>仪表盘</span>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+                </svg>
+                仪表盘
             </a>
             <a href="{{ url_for('customers.index') }}"
                class="sidebar-link {% if request.endpoint and request.endpoint.startswith('customers') %}active{% endif %}">
-                <i class="bi bi-people-fill"></i><span>客户管理</span>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.85"/>
+                </svg>
+                客户管理
+                {% if customer_count is defined %}<span class="nav-badge">{{ customer_count }}</span>{% endif %}
             </a>
             <a href="{{ url_for('leads.index') }}"
                class="sidebar-link {% if request.endpoint and request.endpoint.startswith('leads') %}active{% endif %}">
-                <i class="bi bi-list-task"></i><span>线索管理</span>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                线索管理
+                {% if lead_count is defined %}<span class="nav-badge">{{ lead_count }}</span>{% endif %}
             </a>
             <a href="{{ url_for('scraper.index') }}"
                class="sidebar-link {% if request.endpoint and request.endpoint.startswith('scraper') %}active{% endif %}">
-                <i class="bi bi-bug-fill"></i><span>爬虫控制</span>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+                </svg>
+                爬虫控制
             </a>
         </nav>
-    </div>
+        <div class="sidebar-footer">
+            <div class="user-avatar">管</div>
+            <div class="user-info"><strong>管理员</strong><span>鸿图建材</span></div>
+        </div>
+    </aside>
 
     <!-- 主内容区 -->
-    <div class="main-content">
-        <div class="content-header">
-            <h4 class="mb-0">{% block page_title %}{% endblock %}</h4>
+    <main class="main">
+        <div class="topbar">
+            <div class="topbar-breadcrumb">
+                <a href="{{ url_for('dashboard.index') }}">鸿图建材获客工具</a>
+                <span style="margin:0 4px;color:#ccc;">/</span>
+                <span>{% block breadcrumb %}仪表盘{% endblock %}</span>
+            </div>
+            <div class="topbar-actions">
+                <span class="tb-time" id="clock">--:--:--</span>
+            </div>
         </div>
 
-        <div class="content-body">
+        {% block content_wrapper %}
+        <div class="content">
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
                     {% for category, message in messages %}
-                        <div class="alert alert-{{ 'success' if category == 'success' else 'danger' if category == 'error' else 'warning' if category == 'warning' else 'info' }} alert-dismissible fade show" role="alert">
-                            {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="关闭"></button>
+                        <div class="alert alert-{{ 'success' if category == 'success' else 'danger' if category == 'error' else 'warning' if category == 'warning' else 'info' }}" role="alert">
+                            <span>{{ message }}</span>
+                            <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
                         </div>
                     {% endfor %}
                 {% endif %}
@@ -55,13 +79,9 @@
 
             {% block content %}{% endblock %}
         </div>
+        {% endblock %}
+    </main>
 
-        <footer class="content-footer text-center">
-            <small class="text-muted">&copy; 2026 江门鸿图建材有限公司 · 获客管理工具</small>
-        </footer>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>
