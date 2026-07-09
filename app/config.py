@@ -16,3 +16,8 @@ class Config:
     PER_PAGE = 20
     # 文件上传大小限制
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
+    # 日志配置
+    LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
+    LOG_DIR = os.environ.get('LOG_DIR', 'logs')
+    LOG_RETENTION_DAYS = int(os.environ.get('LOG_RETENTION_DAYS', 14))
+    SLOW_REQUEST_MS = int(os.environ.get('SLOW_REQUEST_MS', 1000))

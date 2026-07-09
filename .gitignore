@@ -59,5 +59,6 @@ ehthumbs.db
 # 日志 / 环境变量 / 其他
 # ====================
 *.log
+logs/
 .env
 .python-version

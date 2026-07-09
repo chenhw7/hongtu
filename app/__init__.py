@@ -4,11 +4,16 @@ from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from app.config import Config
 from app.extensions import db, migrate, login_manager
+from app.logging_config import setup_logging
+from app.request_logging import register_request_logging
 
 
 def create_app(config_class=None):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(config_class or Config)
+
+    # 初始化日志系统（尽早配置，便于后续初始化过程也能输出日志）
+    setup_logging(app)
 
     # 确保instance目录存在
     try:
@@ -30,6 +35,9 @@ def create_app(config_class=None):
     app.register_blueprint(customers)
     app.register_blueprint(leads)
     app.register_blueprint(scraper)
+
+    # 注册接口请求日志钩子
+    register_request_logging(app)
 
     # SQLite WAL模式
     @event.listens_for(Engine, "connect")
