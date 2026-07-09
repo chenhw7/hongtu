@@ -164,9 +164,18 @@
     <div class="row mt-2">
       <div class="col-12">
         <span class="text-muted small me-2">ccgp 频道快捷采集（按公告类型/地域采集全量公告，无需关键词）：</span>
-        <button type="button" class="btn btn-outline-primary btn-sm" onclick="setChannelKeywords('channel:zygg')">中央公告</button>
-        <button type="button" class="btn btn-outline-primary btn-sm" onclick="setChannelKeywords('channel:dfgg')">地方公告</button>
-        <button type="button" class="btn btn-outline-primary btn-sm" onclick="setChannelKeywords('channel:zygg,channel:dfgg')">中央+地方公告</button>
+        <button type="button" class="btn btn-outline-primary btn-sm" onclick="setChannelKeywords('ccgp', 'channel:zygg')">中央公告</button>
+        <button type="button" class="btn btn-outline-primary btn-sm" onclick="setChannelKeywords('ccgp', 'channel:dfgg')">地方公告</button>
+        <button type="button" class="btn btn-outline-primary btn-sm" onclick="setChannelKeywords('ccgp', 'channel:zygg,channel:dfgg')">中央+地方公告</button>
+      </div>
+    </div>
+    <div class="row mt-2">
+      <div class="col-12">
+        <span class="text-muted small me-2">gdgpo 频道快捷采集（无需关键词）：</span>
+        <button type="button" class="btn btn-outline-warning btn-sm" onclick="setChannelKeywords('gdgpo', 'channel:cggg')">采购项目信息（全量）</button>
+        <button type="button" class="btn btn-outline-warning btn-sm" onclick="setChannelKeywords('gdgpo', 'channel:gpfa')">框架协议征集公告</button>
+        <button type="button" class="btn btn-outline-warning btn-sm" onclick="setChannelKeywords('gdgpo', 'channel:gpfaxjj')">框架协议二次竞价采购公告</button>
+        <button type="button" class="btn btn-outline-warning btn-sm" onclick="setChannelKeywords('gdgpo', 'channel:gpfaresult')">框架协议二次竞价成交结果公告</button>
       </div>
     </div>
   </div>
@@ -271,9 +280,10 @@ function runScraperConfig() {
   doRun(taskType, keywords, maxPages);
 }
 
-// 快捷填入频道采集伪关键词（channel:zygg / channel:dfgg），并自动切换数据源为 ccgp
-function setChannelKeywords(val) {
-  document.getElementById('sel-source').value = 'ccgp';
+// 快捷填入频道采集伪关键词（channel:zygg / channel:dfgg / channel:cggg / channel:gpfa），
+// 并自动切换数据源为对应的 source
+function setChannelKeywords(source, val) {
+  document.getElementById('sel-source').value = source;
   document.getElementById('inp-keywords').value = val;
 }
 
