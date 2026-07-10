@@ -73,6 +73,8 @@ def index():
 
     # 配置的关键词
     keywords = current_app.config.get('SCRAPER_KEYWORDS', [])
+    # 各数据源官网地址（用于前端"官网"快捷跳转链接）
+    source_sites = current_app.config.get('SCRAPER_SOURCE_SITES', {})
 
     return render_template(
         'scraper/panel.html',
@@ -85,6 +87,7 @@ def index():
         last_ccgp=last_ccgp,
         last_gdgpo=last_gdgpo,
         keywords=keywords,
+        source_sites=source_sites,
         running_tasks=dict(_running_tasks),
     )
 

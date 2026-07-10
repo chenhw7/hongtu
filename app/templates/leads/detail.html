@@ -127,6 +127,11 @@
                 </form>
             {% endif %}
 
+            <a href="{{ url_for('leads.edit', id=lead.id) }}" class="btn btn-primary btn-sm w-100">编辑线索</a>
+            <form method="POST" action="{{ url_for('leads.delete', id=lead.id) }}" class="mt-2" onsubmit="return confirm('确认删除此线索？删除后不可恢复。')">
+                <button type="submit" class="btn btn-ghost btn-sm w-100" style="color:var(--red)">删除线索</button>
+            </form>
+
             <hr class="form-divider">
 
             <div class="d-grid gap-2">

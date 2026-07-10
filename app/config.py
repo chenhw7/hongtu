@@ -12,6 +12,11 @@ class Config:
     SCRAPE_CHECK_ROBOTS = False  # ccgp/gdgpo 无可用 robots.txt，检查反而触发反爬
     SCRAPE_ANTI_SCRAPE_WAIT = 60  # 检测到反爬/请求失败后的等待时间（秒）
     SCRAPER_KEYWORDS = ['管道', 'PVC管', 'HDPE管', 'PPR管', '给排水', '市政管道', '塑料管']
+    # 各数据源官网地址（用于前端面板"官网"快捷跳转链接，新增数据源时在此追加即可）
+    SCRAPER_SOURCE_SITES = {
+        'ccgp': 'http://www.ccgp.gov.cn/',
+        'gdgpo': 'https://gdgpo.czt.gd.gov.cn/',
+    }
     # 详情页快照与附件下载
     SCRAPE_SAVE_SNAPSHOT = True  # 是否保存详情页HTML快照（防止公告被撤回/修改后无法追溯）
     SCRAPE_DOWNLOAD_ATTACHMENTS = True  # 是否下载详情页中的附件（招标文件/报价单等）

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}{% if lead %}编辑线索{% else %}新增线索{% endif %} - 鸿图建材获客工具{% endblock %}
+{% block breadcrumb %}<a href="{{ url_for('leads.index') }}">线索管理</a> <span style="margin:0 4px;color:#ccc;">/</span> {% if lead %}编辑线索{% else %}新增线索{% endif %}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        {% if lead %}编辑线索{% else %}新增线索{% endif %}
+    </div>
+    <div class="card-body p-4">
+        <form method="POST"
+              action="{% if lead %}{{ url_for('leads.edit', id=lead.id) }}{% else %}{{ url_for('leads.create') }}{% endif %}"
+              class="needs-validation" novalidate>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">项目名称 <span class="required">*</span></label>
+                    <input type="text" name="project_name" class="form-control" required
+                           value="{{ lead.project_name if lead and lead.project_name else '' }}" placeholder="请输入项目名称">
+                    <div class="form-feedback">请输入项目名称</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">招标编号</label>
+                    <input type="text" name="bidding_number" class="form-control"
+                           value="{{ lead.bidding_number if lead and lead.bidding_number else '' }}" placeholder="请输入招标编号">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">公告类型</label>
+                    <select name="announcement_type" class="form-select">
+                        <option value="">请选择</option>
+                        {% for t in announcement_type_choices %}
+                        <option value="{{ t }}" {% if lead and lead.announcement_type == t %}selected{% endif %}>{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">来源类型</label>
+                    <select name="source_type" class="form-select">
+                        <option value="">请选择</option>
+                        {% for s in source_type_choices %}
+                        <option value="{{ s }}" {% if lead and lead.source_type == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">采购单位</label>
+                    <input type="text" name="buyer_name" class="form-control"
+                           value="{{ lead.buyer_name if lead and lead.buyer_name else '' }}" placeholder="请输入采购单位名称">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">采购单位地址</label>
+                    <input type="text" name="buyer_address" class="form-control"
+                           value="{{ lead.buyer_address if lead and lead.buyer_address else '' }}" placeholder="请输入采购单位地址">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">地域</label>
+                    <input type="text" name="region" class="form-control"
+                           value="{{ lead.region if lead and lead.region else '' }}" placeholder="如：广东省、北京市">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">联系人</label>
+                    <input type="text" name="contact_person" class="form-control"
+                           value="{{ lead.contact_person if lead and lead.contact_person else '' }}" placeholder="请输入联系人姓名">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">电话</label>
+                    <input type="text" name="phone" class="form-control"
+                           value="{{ lead.phone if lead and lead.phone else '' }}" placeholder="请输入电话号码">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">预算金额（元）</label>
+                    <input type="number" name="budget_amount" class="form-control" step="0.01"
+                           value="{{ lead.budget_amount if lead and lead.budget_amount is not none else '' }}" placeholder="请输入预算金额">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">采购代理机构</label>
+                    <input type="text" name="agency_name" class="form-control"
+                           value="{{ lead.agency_name if lead and lead.agency_name else '' }}" placeholder="请输入代理机构名称">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">代理机构电话</label>
+                    <input type="text" name="agency_phone" class="form-control"
+                           value="{{ lead.agency_phone if lead and lead.agency_phone else '' }}" placeholder="请输入代理机构电话">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">发布日期</label>
+                    <input type="date" name="publish_date" class="form-control"
+                           value="{{ lead.publish_date.strftime('%Y-%m-%d') if lead and lead.publish_date else '' }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">发布时间</label>
+                    <input type="text" name="publish_time" class="form-control"
+                           value="{{ lead.publish_time if lead and lead.publish_time else '' }}" placeholder="HH:MM（如：14:30）">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">截止日期</label>
+                    <input type="date" name="deadline" class="form-control"
+                           value="{{ lead.deadline.strftime('%Y-%m-%d') if lead and lead.deadline else '' }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">来源URL</label>
+                    <input type="url" name="source_url" class="form-control"
+                           value="{{ lead.source_url if lead and lead.source_url else '' }}" placeholder="https://...">
+                </div>
+            </div>
+
+            <hr class="form-divider">
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">保存</button>
+                <a href="{% if lead %}{{ url_for('leads.detail', id=lead.id) }}{% else %}{{ url_for('leads.index') }}{% endif %}" class="btn btn-secondary">取消</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

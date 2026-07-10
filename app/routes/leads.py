@@ -2,12 +2,13 @@
 """线索管理路由"""
 import json
 import os
+import re
 from datetime import datetime, date
 from io import BytesIO
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for, flash, send_file,
-    send_from_directory, abort, current_app,
+    send_from_directory, abort, current_app, Response,
 )
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -18,6 +19,14 @@ from app.models import Lead, Customer, Attachment
 from app.config import Config
 
 leads = Blueprint('leads', __name__, url_prefix='/leads')
+
+# 线索表单下拉选项
+ANNOUNCEMENT_TYPE_CHOICES = [
+    '公开招标', '中标公告', '成交公告', '更正公告',
+    '终止公告', '竞争性磋商', '竞争性谈判', '询价公告',
+    '单一来源', '其他公告',
+]
+SOURCE_TYPE_CHOICES = ['ccgp', 'gdgpo', '手动录入']
 
 
 def _resolve_instance_file(relative_path):
@@ -37,8 +46,65 @@ def _resolve_instance_file(relative_path):
     return os.path.split(full_path)
 
 
+_SNAPSHOT_HEAD_INJECT = (
+    '<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+    '<style>html,body{margin:0;padding:0;background:#f2f1ef;'
+    'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}</style>'
+)
+
+
+def _wrap_snapshot_html(raw_html, back_url):
+    """给爬虫保存的原始快照HTML套一层展示用的外壳（页边距/卡片背景/返回链接），
+    仅在渲染时包装，不修改磁盘上存储的原始文件。快照HTML本身常常不是规范的完整
+    文档（缺少<meta charset>甚至闭合标签），依赖浏览器的隐式闭合来正常渲染，
+    因此这里只在开头标签处插入内容，不手动补齐结尾标签。
+    """
+    html = raw_html
+    if re.search(r'(?i)<html[^>]*>', html):
+        html = re.sub(r'(?i)(<html[^>]*>)', r'\1' + _SNAPSHOT_HEAD_INJECT, html, count=1)
+    else:
+        html = _SNAPSHOT_HEAD_INJECT + html
+
+    toolbar = (
+        '<div style="max-width:900px;margin:0 auto;padding:20px 16px 0;font-size:13px">'
+        '<a href="%s" style="color:#78716c;text-decoration:none">&larr; 返回线索详情</a></div>'
+        '<div style="max-width:900px;margin:12px auto 60px;background:#fff;padding:32px 40px;'
+        'border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.12)">'
+    ) % back_url
+    if re.search(r'(?i)<body[^>]*>', html):
+        html = re.sub(r'(?i)(<body[^>]*>)', r'\1' + toolbar, html, count=1)
+    else:
+        html = toolbar + html
+    return html
+
+
+def _parse_date(value):
+    """将表单日期字符串转为 date 对象，无效或为空时返回 None"""
+    value = (value or '').strip()
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, '%Y-%m-%d').date()
+    except ValueError:
+        return None
+
+
+def _parse_budget(value):
+    """将表单金额字符串转为 float，无效或为空时返回 None"""
+    value = (value or '').strip()
+    if not value:
+        return None
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return None
+
+
 def _apply_filters(query):
     """公共方法：对查询对象应用筛选条件"""
+    # 默认排除已软删除的线索
+    query = query.filter(Lead.deleted == False)  # noqa: E712
+
     source_type = request.args.get('source_type', '', type=str)
     is_converted = request.args.get('is_converted', '', type=str)
     q = request.args.get('q', '', type=str).strip()
@@ -90,7 +156,7 @@ def _apply_filters(query):
 
 @leads.route('/')
 def index():
-    """线索列表 - 支持筛选、搜索、分页"""
+    """线索列表 - 支持筛选、搜索、分页、排序"""
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', Config.PER_PAGE, type=int)
     source_type = request.args.get('source_type', '', type=str)
@@ -100,9 +166,38 @@ def index():
     date_to = request.args.get('date_to', '', type=str)
     announcement_type = request.args.get('announcement_type', '', type=str)
     region = request.args.get('region', '', type=str)
+    sort = request.args.get('sort', 'publish_date', type=str)
+    order = request.args.get('order', 'desc', type=str)
+
+    # 白名单排序字段，防止 SQL 注入
+    SORT_WHITELIST = {
+        'id': Lead.id,
+        'publish_date': Lead.publish_date,
+        'deadline': Lead.deadline,
+        'budget_amount': Lead.budget_amount,
+        'created_at': Lead.created_at,
+    }
+    sort_col = SORT_WHITELIST.get(sort, Lead.publish_date)
+    is_desc = order == 'desc'
 
     query = _apply_filters(Lead.query)
-    query = query.order_by(Lead.publish_date.desc().nullslast(), Lead.created_at.desc())
+
+    # 日期/可空字段 null 值排在最后（升序）或最前（降序）
+    if sort in ('publish_date', 'deadline'):
+        if is_desc:
+            query = query.order_by(sort_col.desc().nullslast())
+        else:
+            query = query.order_by(sort_col.asc().nullslast())
+    elif sort == 'budget_amount':
+        if is_desc:
+            query = query.order_by(sort_col.desc().nullslast())
+        else:
+            query = query.order_by(sort_col.asc().nullslast())
+    else:
+        if is_desc:
+            query = query.order_by(sort_col.desc())
+        else:
+            query = query.order_by(sort_col.asc())
 
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
@@ -144,7 +239,9 @@ def index():
                            announcement_types=announcement_types,
                            regions=regions,
                            query_args=query_args,
-                           today=date.today())
+                           today=date.today(),
+                           sort=sort,
+                           order=order)
 
 
 @leads.route('/<int:id>')
@@ -174,7 +271,10 @@ def snapshot(id):
     directory, filename = _resolve_instance_file(lead.html_snapshot_path)
     if not directory:
         abort(404)
-    return send_from_directory(directory, filename)
+    with open(os.path.join(directory, filename), encoding='utf-8') as f:
+        raw_html = f.read()
+    wrapped = _wrap_snapshot_html(raw_html, url_for('leads.detail', id=lead.id))
+    return Response(wrapped, mimetype='text/html')
 
 
 @leads.route('/<int:id>/attachments/<int:attachment_id>')
@@ -350,3 +450,107 @@ def export():
         download_name=filename,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
+
+
+@leads.route('/new', methods=['GET', 'POST'])
+def create():
+    """手动新增线索"""
+    if request.method == 'POST':
+        project_name = request.form.get('project_name', '').strip()
+        if not project_name:
+            flash('项目名称不能为空', 'error')
+            return redirect(url_for('leads.create'))
+
+        lead = Lead(
+            project_name=project_name,
+            bidding_number=request.form.get('bidding_number', '').strip() or None,
+            announcement_type=request.form.get('announcement_type', ''),
+            buyer_name=request.form.get('buyer_name', '').strip(),
+            buyer_address=request.form.get('buyer_address', '').strip(),
+            region=request.form.get('region', '').strip(),
+            contact_person=request.form.get('contact_person', '').strip(),
+            phone=request.form.get('phone', '').strip(),
+            agency_name=request.form.get('agency_name', '').strip(),
+            agency_phone=request.form.get('agency_phone', '').strip(),
+            budget_amount=_parse_budget(request.form.get('budget_amount', '')),
+            publish_date=_parse_date(request.form.get('publish_date', '')),
+            publish_time=request.form.get('publish_time', '').strip(),
+            deadline=_parse_date(request.form.get('deadline', '')),
+            source_url=request.form.get('source_url', '').strip(),
+            source_type=request.form.get('source_type', '手动录入'),
+        )
+        db.session.add(lead)
+        try:
+            db.session.commit()
+            flash('线索添加成功', 'success')
+        except Exception:
+            db.session.rollback()
+            flash('操作失败，请重试（招标编号可能重复）', 'error')
+            return redirect(url_for('leads.create'))
+        return redirect(url_for('leads.detail', id=lead.id))
+
+    return render_template(
+        'leads/form.html',
+        lead=None,
+        announcement_type_choices=ANNOUNCEMENT_TYPE_CHOICES,
+        source_type_choices=SOURCE_TYPE_CHOICES,
+    )
+
+
+@leads.route('/<int:id>/edit', methods=['GET', 'POST'])
+def edit(id):
+    """编辑线索"""
+    lead = Lead.query.get_or_404(id)
+
+    if request.method == 'POST':
+        project_name = request.form.get('project_name', '').strip()
+        if not project_name:
+            flash('项目名称不能为空', 'error')
+            return redirect(url_for('leads.edit', id=id))
+
+        lead.project_name = project_name
+        bidding_number = request.form.get('bidding_number', '').strip()
+        lead.bidding_number = bidding_number if bidding_number else None
+        lead.announcement_type = request.form.get('announcement_type', '')
+        lead.buyer_name = request.form.get('buyer_name', '').strip()
+        lead.buyer_address = request.form.get('buyer_address', '').strip()
+        lead.region = request.form.get('region', '').strip()
+        lead.contact_person = request.form.get('contact_person', '').strip()
+        lead.phone = request.form.get('phone', '').strip()
+        lead.agency_name = request.form.get('agency_name', '').strip()
+        lead.agency_phone = request.form.get('agency_phone', '').strip()
+        lead.budget_amount = _parse_budget(request.form.get('budget_amount', ''))
+        lead.publish_date = _parse_date(request.form.get('publish_date', ''))
+        lead.publish_time = request.form.get('publish_time', '').strip()
+        lead.deadline = _parse_date(request.form.get('deadline', ''))
+        lead.source_url = request.form.get('source_url', '').strip()
+        lead.source_type = request.form.get('source_type', '手动录入')
+        try:
+            db.session.commit()
+            flash('线索信息已更新', 'success')
+        except Exception:
+            db.session.rollback()
+            flash('操作失败，请重试（招标编号可能重复）', 'error')
+            return redirect(url_for('leads.edit', id=id))
+        return redirect(url_for('leads.detail', id=lead.id))
+
+    return render_template(
+        'leads/form.html',
+        lead=lead,
+        announcement_type_choices=ANNOUNCEMENT_TYPE_CHOICES,
+        source_type_choices=SOURCE_TYPE_CHOICES,
+    )
+
+
+@leads.route('/<int:id>/delete', methods=['POST'])
+def delete(id):
+    """软删除线索（将deleted标记置为True）"""
+    lead = Lead.query.get_or_404(id)
+    lead.deleted = True
+    try:
+        db.session.commit()
+        flash('线索已删除', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('操作失败，请重试', 'error')
+    return redirect(url_for('leads.index'))

@@ -346,7 +346,6 @@ table thead th {
   letter-spacing: 0.04em;
   background: #fafaf9;
   border-bottom: 1px solid var(--border-subtle);
-  white-space: nowrap;
 }
 table tbody td {
   padding: 8px 14px;
@@ -363,13 +362,50 @@ table .cell-muted { color: var(--text-muted); font-size: 11px; }
 table .cell-link { color: var(--accent); cursor: pointer; font-weight: 500; text-decoration: none; }
 table .cell-link:hover { text-decoration: underline; }
 table .cell-truncate { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-table .cell-actions { display: flex; gap: 4px; }
+table .cell-actions { display: flex; gap: 4px; flex-wrap: nowrap; }
+table .cell-project-name { min-width: 160px; max-width: 320px; word-break: break-word; }
 table .text-end { text-align: right; }
 table .text-danger { color: var(--red); }
 table .fw-bold { font-weight: 600; }
 table .row-converted { background: #fafdf9; }
 table .row-converted:hover { background: #f2f8f0; }
 table .empty-row td { text-align: center; color: var(--text-muted); padding: 32px 16px; }
+
+/* Sticky right column (操作) */
+table .cell-sticky-right {
+  position: sticky; right: 0;
+  background: var(--bg-surface);
+  white-space: nowrap;
+}
+table thead th.cell-sticky-right {
+  background: #fafaf9;
+  z-index: 2;
+}
+table tbody td.cell-sticky-right {
+  z-index: 0;
+  box-shadow: -3px 0 6px rgba(0,0,0,0.06);
+}
+table tbody tr:hover td.cell-sticky-right {
+  background: #fafaf9;
+}
+table tbody tr.row-converted td.cell-sticky-right {
+  background: #fafdf9;
+}
+table tbody tr.row-converted:hover td.cell-sticky-right {
+  background: #f2f8f0;
+}
+
+/* Sortable column headers */
+.sort-link {
+  color: var(--text-muted); text-decoration: none;
+  display: inline-flex; align-items: center; gap: 2px;
+  transition: color 0.15s ease;
+}
+.sort-link:hover { color: var(--accent); text-decoration: none; }
+.sort-arrow {
+  font-size: 9px; color: var(--accent);
+  line-height: 1;
+}
 
 /* ============================================================
    Filter Bar
@@ -681,7 +717,9 @@ textarea.form-control { resize: vertical; }
 }
 .scraper-card:hover { border-color: var(--border-default); }
 .scraper-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.scraper-card-header h3 { font-size: 14px; font-weight: 600; }
+.scraper-card-header h3 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.site-link { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 400; color: var(--accent); text-decoration: none; }
+.site-link:hover { text-decoration: underline; }
 .scraper-card-meta { display: flex; flex-direction: column; gap: 4px; }
 .scraper-card-meta .meta-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
 .scraper-card-meta .meta-label { color: var(--text-muted); }

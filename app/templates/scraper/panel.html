@@ -48,7 +48,14 @@
 <div class="scraper-grid">
     <div class="scraper-card">
         <div class="scraper-card-header">
-            <h3>中国政府采购网 (ccgp)</h3>
+            <h3>中国政府采购网 (ccgp)
+                {% if source_sites.ccgp %}
+                <a href="{{ source_sites.ccgp }}" target="_blank" rel="noopener" class="site-link" title="打开中国政府采购网官网">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    官网
+                </a>
+                {% endif %}
+            </h3>
             <span class="badge badge-slate">共 {{ ccgp_count }} 条</span>
         </div>
         <div class="scraper-card-meta">
@@ -72,7 +79,14 @@
     </div>
     <div class="scraper-card">
         <div class="scraper-card-header">
-            <h3>广东省政府采购网 (gdgpo)</h3>
+            <h3>广东省政府采购网 (gdgpo)
+                {% if source_sites.gdgpo %}
+                <a href="{{ source_sites.gdgpo }}" target="_blank" rel="noopener" class="site-link" title="打开广东省政府采购网官网">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    官网
+                </a>
+                {% endif %}
+            </h3>
             <span class="badge badge-slate">共 {{ gdgpo_count }} 条</span>
         </div>
         <div class="scraper-card-meta">

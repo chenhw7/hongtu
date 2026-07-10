@@ -26,6 +26,7 @@ def _ensure_schema_upgrades(app):
         'html_snapshot_path': 'VARCHAR(500)',
         'announcement_type': 'VARCHAR(50)',
         'region': 'VARCHAR(50)',
+        'deleted': 'BOOLEAN DEFAULT 0',
     }
 
     try:

@@ -20,6 +20,10 @@
     <div class="toolbar">
         <span class="toolbar-title">线索管理</span>
         <div class="toolbar-actions">
+            <a href="{{ url_for('leads.create') }}" class="btn btn-primary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                新增线索
+            </a>
             <a href="{{ url_for('leads.export') }}?{{ request.query_string.decode() }}" class="btn btn-secondary">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 导出 Excel
@@ -97,8 +101,34 @@
                 <table>
                     <thead><tr>
                         <th style="width:30px"><input type="checkbox" class="checkbox-custom" id="selectAll" onclick="toggleAll(this)"></th>
-                        <th style="width:40px">#</th>
-                        <th>招标编号</th><th>项目名称</th><th>采购单位</th><th>联系人</th><th>电话</th><th>预算金额(元)</th><th>发布日期</th><th>截止日期</th><th>来源</th><th>状态</th><th style="width:130px">操作</th>
+                        <th style="width:40px">
+                            <a href="{{ url_for('leads.index', sort='id', order='asc' if sort=='id' and order=='desc' else 'desc', **query_args) }}" class="sort-link">
+                                #{% if sort == 'id' %}<span class="sort-arrow">{{ '▾' if order == 'desc' else '▴' }}</span>{% endif %}
+                            </a>
+                        </th>
+                        <th>项目名称</th>
+                        <th>采购单位</th><th>联系人</th><th>电话</th>
+                        <th>
+                            <a href="{{ url_for('leads.index', sort='budget_amount', order='asc' if sort=='budget_amount' and order=='desc' else 'desc', **query_args) }}" class="sort-link">
+                                预算金额{% if sort == 'budget_amount' %}<span class="sort-arrow">{{ '▾' if order == 'desc' else '▴' }}</span>{% endif %}
+                            </a>
+                        </th>
+                        <th>
+                            <a href="{{ url_for('leads.index', sort='publish_date', order='asc' if sort=='publish_date' and order=='desc' else 'desc', **query_args) }}" class="sort-link">
+                                发布日期{% if sort == 'publish_date' %}<span class="sort-arrow">{{ '▾' if order == 'desc' else '▴' }}</span>{% endif %}
+                            </a>
+                        </th>
+                        <th>
+                            <a href="{{ url_for('leads.index', sort='deadline', order='asc' if sort=='deadline' and order=='desc' else 'desc', **query_args) }}" class="sort-link">
+                                截止日期{% if sort == 'deadline' %}<span class="sort-arrow">{{ '▾' if order == 'desc' else '▴' }}</span>{% endif %}
+                            </a>
+                        </th>
+                        <th>
+                            <a href="{{ url_for('leads.index', sort='created_at', order='asc' if sort=='created_at' and order=='desc' else 'desc', **query_args) }}" class="sort-link">
+                                采集时间{% if sort == 'created_at' %}<span class="sort-arrow">{{ '▾' if order == 'desc' else '▴' }}</span>{% endif %}
+                            </a>
+                        </th>
+                        <th>来源</th><th>状态</th><th class="cell-sticky-right">操作</th>
                     </tr></thead>
                     <tbody>
                         {% for lead in leads.items %}
@@ -110,10 +140,9 @@
                                 <input type="checkbox" class="checkbox-custom" disabled>
                                 {% endif %}
                             </td>
-                            <td class="cell-muted">{{ lead.id }}</td>
-                            <td class="cell-muted">{{ lead.bidding_number or '—' }}</td>
-                            <td>
-                                <a href="{{ url_for('leads.detail', id=lead.id) }}" class="cell-link cell-truncate" style="max-width:200px" title="{{ lead.project_name or '' }}">{{ lead.project_name or '—' }}</a>
+                            <td class="cell-muted">{{ (leads.page - 1) * leads.per_page + loop.index }}</td>
+                            <td class="cell-project-name">
+                                <a href="{{ url_for('leads.detail', id=lead.id) }}" class="cell-link" title="{{ lead.project_name or '' }}">{{ lead.project_name or '—' }}</a>
                                 {% if lead.announcement_type %}
                                 <div><span class="badge badge-slate text-xs">{{ lead.announcement_type }}</span></div>
                                 {% endif %}
@@ -137,6 +166,7 @@
                                     {% endif %}
                                 {% else %}—{% endif %}
                             </td>
+                            <td class="cell-muted">{{ lead.created_at.strftime('%Y-%m-%d %H:%M') if lead.created_at else '—' }}</td>
                             <td>
                                 {% if lead.source_type == 'ccgp' %}
                                 <span class="badge badge-accent">ccgp</span>
@@ -153,8 +183,12 @@
                                 <span class="badge badge-amber">待处理</span>
                                 {% endif %}
                             </td>
-                            <td class="cell-actions">
+                            <td class="cell-sticky-right cell-actions">
                                 <a href="{{ url_for('leads.detail', id=lead.id) }}" class="btn btn-ghost btn-xs">详情</a>
+                                <a href="{{ url_for('leads.edit', id=lead.id) }}" class="btn btn-ghost btn-xs">编辑</a>
+                                <form method="POST" action="{{ url_for('leads.delete', id=lead.id) }}" class="d-inline" onsubmit="return confirm('确认删除此线索？')">
+                                    <button type="submit" class="btn btn-ghost btn-xs" style="color:var(--red)">删除</button>
+                                </form>
                                 {% if not lead.is_converted %}
                                 <button type="submit" formaction="{{ url_for('leads.convert', id=lead.id) }}"
                                         class="btn btn-success btn-xs" onclick="return confirm('确认将此线索转化为客户？')">转客户</button>
@@ -183,19 +217,19 @@
                 </div>
                 <div class="pagination-pages">
                     {% if leads.has_prev %}
-                    <a href="{{ url_for('leads.index', page=leads.prev_num, **query_args) }}">←</a>
+                    <a href="{{ url_for('leads.index', page=leads.prev_num, sort=sort, order=order, **query_args) }}">←</a>
                     {% else %}
                     <span class="disabled">←</span>
                     {% endif %}
                     {% for p in leads.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
                         {% if p %}
-                        <a href="{{ url_for('leads.index', page=p, **query_args) }}" class="{% if p == leads.page %}active{% endif %}">{{ p }}</a>
+                        <a href="{{ url_for('leads.index', page=p, sort=sort, order=order, **query_args) }}" class="{% if p == leads.page %}active{% endif %}">{{ p }}</a>
                         {% else %}
                         <span>…</span>
                         {% endif %}
                     {% endfor %}
                     {% if leads.has_next %}
-                    <a href="{{ url_for('leads.index', page=leads.next_num, **query_args) }}">→</a>
+                    <a href="{{ url_for('leads.index', page=leads.next_num, sort=sort, order=order, **query_args) }}">→</a>
                     {% else %}
                     <span class="disabled">→</span>
                     {% endif %}

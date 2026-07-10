@@ -116,6 +116,8 @@ _GPFA_SECTION_RE = re.compile(r'二、征集人信息(.+?)三、', re.DOTALL)
 # ------------------------------------------------------------------
 _GPFA_XJJ_LIST_URL = 'https://gdgpo.czt.gd.gov.cn/gateway/gpfa-bpoc/notice/v1/ignore/getNoticeList'
 _GPFA_XJJ_DETAIL_URL = 'https://gdgpo.czt.gd.gov.cn/gateway/gpfa-bpoc/api/notice/other/v1/ignore/getNoticeDetailExceptGD'
+# 真实前端详情页（浏览器里点击“采购公告”分类进入的落地页，用户已验证可直接打开）
+_GPFA_XJJ_PAGE_URL = 'https://gdgpo.czt.gd.gov.cn/gpfa-main-web/basic/noticeDetail'
 
 # 伪关键词：采集 gpfa 框架协议二次竞价采购公告（noticeType=0, projectType=17）
 _CHANNEL_KEYWORD_GPFA_XJJ = 'channel:gpfaxjj'
@@ -521,7 +523,7 @@ class GdgpoScraper(BaseScraper):
             'project_name': (row.get('title') or '').strip()[:500],
             'announcement_type': announcement_type,
             'region': (row.get('regionName') or '').strip()[:50],
-            'source_url': '%s?noticeGuid=%s' % (_GPFA_XJJ_DETAIL_URL, row.get('noticeGuid', '')),
+            'source_url': '%s?noticeGuid=%s' % (_GPFA_XJJ_PAGE_URL, row.get('noticeGuid', '')),
         }
 
         budget = self._parse_amount(row.get('budgetAmount'))

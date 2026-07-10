@@ -61,6 +61,10 @@
             </div>
             <div class="topbar-actions">
                 <span class="tb-time" id="clock">--:--:--</span>
+                <button class="btn btn-danger btn-sm" onclick="openModal('clearDataModal')" style="margin-left:10px;" title="清除数据">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    清除数据
+                </button>
             </div>
         </div>
 
@@ -81,6 +85,36 @@
         </div>
         {% endblock %}
     </main>
+
+    <!-- 清除数据确认弹窗 -->
+    <div class="modal-overlay d-none" id="clearDataModal">
+        <div class="modal-panel">
+            <div class="modal-header">
+                <h3>清除数据库数据</h3>
+                <button class="btn btn-ghost btn-sm" onclick="closeModal('clearDataModal')" style="font-size:16px;padding:2px 6px;">&times;</button>
+            </div>
+            <form method="POST" action="{{ url_for('dashboard.clear_data') }}">
+                <div class="modal-body">
+                    <p>此操作将清除以下数据：</p>
+                    <ul style="color:var(--text-secondary);font-size:12px;padding-left:16px;margin-bottom:8px;">
+                        <li>客户、跟进记录</li>
+                        <li>线索、附件记录</li>
+                        <li>爬虫任务</li>
+                        <li>附件文件与快照</li>
+                    </ul>
+                    <p style="color:var(--red);">⚠ 用户账号将被保留，清除后不可恢复。</p>
+                    <div style="margin-top:12px;">
+                        <label style="font-size:12px;color:var(--text-secondary);">请输入确认密码：</label>
+                        <input type="password" name="password" class="form-control" placeholder="请输入密码" required autocomplete="off" style="margin-top:4px;width:100%;">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('clearDataModal')">取消</button>
+                    <button type="submit" class="btn btn-danger btn-sm">确认清除</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     {% block scripts %}{% endblock %}
