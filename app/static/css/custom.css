@@ -363,6 +363,15 @@ table .cell-link { color: var(--accent); cursor: pointer; font-weight: 500; text
 table .cell-link:hover { text-decoration: underline; }
 table .cell-truncate { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 table .cell-actions { display: flex; gap: 4px; flex-wrap: nowrap; }
+table td.cell-sticky-right.cell-actions {
+  display: table-cell;
+  white-space: nowrap;
+}
+table td.cell-sticky-right.cell-actions .btn + .btn,
+table td.cell-sticky-right.cell-actions .btn + form,
+table td.cell-sticky-right.cell-actions form + .btn {
+  margin-left: 4px;
+}
 table .cell-project-name { min-width: 160px; max-width: 320px; word-break: break-word; }
 table .text-end { text-align: right; }
 table .text-danger { color: var(--red); }
@@ -377,9 +386,20 @@ table .cell-sticky-right {
   background: var(--bg-surface);
   white-space: nowrap;
 }
+table .cell-sticky-right::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 1px;
+  background: var(--border-subtle);
+  z-index: 1;
+}
 table thead th.cell-sticky-right {
   background: #fafaf9;
   z-index: 2;
+}
+table thead th.cell-sticky-right::before {
+  z-index: 3;
 }
 table tbody td.cell-sticky-right {
   z-index: 0;
