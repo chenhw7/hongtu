@@ -75,7 +75,7 @@ class Lead(db.Model):
     publish_time = db.Column(db.String(10), comment='发布时间（HH:MM，精确到分钟）')
     deadline = db.Column(db.Date, comment='截止日期')
     source_url = db.Column(db.String(500), comment='来源URL')
-    source_type = db.Column(db.String(50), comment='来源类型：ccgp/gdgpo')
+    source_type = db.Column(db.String(50), comment='来源类型：ccgp/gdgpo/eia')
     raw_data = db.Column(db.Text, comment='原始数据JSON')
     html_snapshot_path = db.Column(db.String(500), comment='详情页HTML快照的本地相对路径')
     is_converted = db.Column(db.Boolean, default=False, comment='是否已转为客户')

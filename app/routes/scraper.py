@@ -5,7 +5,7 @@ from datetime import datetime, date
 
 from flask import Blueprint, render_template, jsonify, request, current_app
 
-from app.models import Lead, ScrapeTask
+from app.models import Customer, Lead, ScrapeTask
 from app.extensions import db
 
 scraper = Blueprint('scraper', __name__, url_prefix='/scraper')
@@ -31,6 +31,12 @@ def _run_scraper_task(app, task_type, keywords, max_pages):
             elif task_type == 'gdgpo':
                 from scraper.gdgpo import GdgpoScraper
                 scraper_instance = GdgpoScraper(app=app)
+            elif task_type == 'poi':
+                from scraper.poi import AmapPoiScraper
+                scraper_instance = AmapPoiScraper(app=app)
+            elif task_type == 'eia':
+                from scraper.eia import EiaScraper
+                scraper_instance = EiaScraper(app=app)
             else:
                 return
 
@@ -57,6 +63,8 @@ def index():
     # 各来源数量
     ccgp_count = Lead.query.filter_by(source_type='ccgp').count()
     gdgpo_count = Lead.query.filter_by(source_type='gdgpo').count()
+    poi_count = Customer.query.filter_by(source='地图POI采集').count()
+    eia_count = Lead.query.filter_by(source_type='eia').count()
 
     # 最近10条采集任务
     recent_tasks = ScrapeTask.query.order_by(
@@ -68,6 +76,12 @@ def index():
         ScrapeTask.created_at.desc()
     ).first()
     last_gdgpo = ScrapeTask.query.filter_by(task_type='gdgpo').order_by(
+        ScrapeTask.created_at.desc()
+    ).first()
+    last_poi = ScrapeTask.query.filter_by(task_type='poi').order_by(
+        ScrapeTask.created_at.desc()
+    ).first()
+    last_eia = ScrapeTask.query.filter_by(task_type='eia').order_by(
         ScrapeTask.created_at.desc()
     ).first()
 
@@ -83,9 +97,13 @@ def index():
         converted_leads=converted_leads,
         ccgp_count=ccgp_count,
         gdgpo_count=gdgpo_count,
+        poi_count=poi_count,
+        eia_count=eia_count,
         recent_tasks=recent_tasks,
         last_ccgp=last_ccgp,
         last_gdgpo=last_gdgpo,
+        last_poi=last_poi,
+        last_eia=last_eia,
         keywords=keywords,
         source_sites=source_sites,
         running_tasks=dict(_running_tasks),
@@ -112,17 +130,22 @@ def run():
     except (ValueError, TypeError):
         return jsonify({'success': False, 'message': '页数必须为整数'}), 400
 
-    # 解析关键词
+    # 解析关键词：留空时传 None，交给各数据源自己的 run() 决定默认值
+    # （ccgp/gdgpo 走 BaseScraper.run() 的 self.keywords，即 SCRAPER_KEYWORDS；
+    # poi/eia 走各自重写的 run()，用 POI_KEYWORDS×POI_CITIES / region 列表，
+    # 不能在这里统一塞 SCRAPER_KEYWORDS，否则会把管道招标关键词错当成
+    # poi 的"关键词@城市"或 eia 的"region:xxx"伪关键词，导致全部判定为无效）
     if keywords_str:
         keywords = [k.strip() for k in keywords_str.split(',') if k.strip()]
     else:
-        keywords = current_app.config.get('SCRAPER_KEYWORDS', [])
+        keywords = None
 
-    # 确定要运行的数据源
+    # 确定要运行的数据源（POI 产出的是 Customer 潜在客户而非 Lead 招投标线索，
+    # 与 ccgp/gdgpo 性质不同，'all' 不自动包含 poi，需单独触发）
     task_types = []
     if task_type == 'all':
         task_types = ['ccgp', 'gdgpo']
-    elif task_type in ('ccgp', 'gdgpo'):
+    elif task_type in ('ccgp', 'gdgpo', 'poi', 'eia'):
         task_types = [task_type]
     else:
         return jsonify({'success': False, 'message': f'无效的数据源: {task_type}'}), 400
@@ -160,7 +183,7 @@ def _resolve_control_task_types(task_type):
     """将 task_type ('ccgp'/'gdgpo'/'all') 解析为当前正在运行的数据源列表。"""
     if task_type == 'all':
         candidates = ['ccgp', 'gdgpo']
-    elif task_type in ('ccgp', 'gdgpo'):
+    elif task_type in ('ccgp', 'gdgpo', 'poi', 'eia'):
         candidates = [task_type]
     else:
         return None

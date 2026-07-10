@@ -16,8 +16,8 @@ customers = Blueprint('customers', __name__, url_prefix='/customers')
 
 # ---- 常量：下拉选项 ----
 STATUS_CHOICES = ['新线索', '跟进中', '已报价', '已成交', '已流失']
-INDUSTRY_CHOICES = ['市政工程', '建筑工程', '装饰装修', '水务', '电力', '通信', '其他']
-SOURCE_CHOICES = ['爬虫采集', '手动录入', 'Excel导入', '转介绍', '其他']
+INDUSTRY_CHOICES = ['市政工程', '建筑工程', '装饰装修', '水务', '电力', '通信', '经销商/建材', '其他']
+SOURCE_CHOICES = ['爬虫采集', '地图POI采集', '手动录入', 'Excel导入', '转介绍', '其他']
 FOLLOW_TYPE_CHOICES = ['电话', '拜访', '微信', '邮件']
 
 # Excel 导入时表头与字段名的映射

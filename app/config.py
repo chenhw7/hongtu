@@ -16,7 +16,21 @@ class Config:
     SCRAPER_SOURCE_SITES = {
         'ccgp': 'http://www.ccgp.gov.cn/',
         'gdgpo': 'https://gdgpo.czt.gd.gov.cn/',
+        'poi': 'https://lbs.amap.com/',
+        'eia': 'https://gdee.gd.gov.cn/jsxmsp3189/index.html',
     }
+    # 高德地图 Web服务API Key（个人开发者免费申请：https://lbs.amap.com/ -> 控制台 ->
+    # 创建应用 -> 添加Key -> 服务平台选"Web服务"，不要选"Web端(JS API)"）。
+    # 不要把真实Key写进代码仓库，通过环境变量注入。
+    AMAP_API_KEY = os.environ.get('AMAP_API_KEY', '')
+    # 地图POI采集关键词（管道经销商/门店/工厂类目搜索词）
+    POI_KEYWORDS = ['PVC管材', '给排水管件', '塑料管材经销', 'HDPE管材', 'PPR管材', '管材批发', '管件加工厂']
+    # 地图POI采集城市范围（默认广东省21个地级市，与现有gdgpo数据源范围保持一致）
+    POI_CITIES = [
+        '广州', '深圳', '珠海', '汕头', '佛山', '韶关', '河源', '梅州', '惠州',
+        '汕尾', '东莞', '中山', '江门', '阳江', '湛江', '茂名', '肇庆', '清远',
+        '潮州', '揭阳', '云浮',
+    ]
     # 详情页快照与附件下载
     SCRAPE_SAVE_SNAPSHOT = True  # 是否保存详情页HTML快照（防止公告被撤回/修改后无法追溯）
     SCRAPE_DOWNLOAD_ATTACHMENTS = True  # 是否下载详情页中的附件（招标文件/报价单等）
