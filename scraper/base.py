@@ -522,6 +522,10 @@ class BaseScraper:
         except Exception:
             logger.debug('[%s] 进度更新失败（忽略）', self.source_type, exc_info=True)
 
+    def _keyword_display(self, keyword):
+        """返回关键词的用户友好显示名称，子类可覆写以自定义展示。"""
+        return keyword
+
     def _progress_finish(self, status, collected=0, error_msg=None):
         try:
             from scraper import progress
@@ -584,14 +588,14 @@ class BaseScraper:
                 self._progress_update(
                     keyword_index=kw_index,
                     current_keyword=keyword,
-                    message='采集关键词「%s」(%d/%d)' % (keyword, kw_index, len(keywords)),
+                    message='采集关键词「%s」(%d/%d)' % (self._keyword_display(keyword), kw_index, len(keywords)),
                 )
                 for page in range(1, max_pages + 1):
                     self._check_pause_and_stop()
                     logger.info('[%s] 关键词="%s" 第 %d 页', self.source_type, keyword, page)
                     self._progress_update(
                         current_page=page,
-                        message='采集关键词「%s」第 %d/%d 页' % (keyword, page, max_pages),
+                        message='采集关键词「%s」第 %d/%d 页' % (self._keyword_display(keyword), page, max_pages),
                     )
                     leads_data = self._scrape_page(keyword, page)
 
@@ -622,7 +626,7 @@ class BaseScraper:
                         done_pages=done_pages,
                         collected=total_new,
                         message='关键词「%s」第 %d 页: 新增 %d 条（累计 %d 条）'
-                                % (keyword, page, new_count, total_new),
+                                % (self._keyword_display(keyword), page, new_count, total_new),
                     )
 
             # 4. 更新任务状态

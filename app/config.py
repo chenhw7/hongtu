@@ -17,7 +17,6 @@ class Config:
         'ccgp': 'http://www.ccgp.gov.cn/',
         'gdgpo': 'https://gdgpo.czt.gd.gov.cn/',
         'poi': 'https://lbs.amap.com/',
-        'eia': 'https://gdee.gd.gov.cn/jsxmsp3189/index.html',
     }
     # 高德地图 Web服务API Key（个人开发者免费申请：https://lbs.amap.com/ -> 控制台 ->
     # 创建应用 -> 添加Key -> 服务平台选"Web服务"，不要选"Web端(JS API)"）。

@@ -13,11 +13,12 @@ _scheduler = None
 def run_daily_scrape(app):
     """每日自动采集任务
 
-    在 Flask app context 中依次运行两个数据源的爬虫。
+    在 Flask app context 中依次运行各数据源的爬虫。
     """
     with app.app_context():
         from scraper.ccgp import CcgpScraper
         from scraper.gdgpo import GdgpoScraper
+        from scraper.eia import EiaScraper
 
         logger.info('===== 每日定时采集开始 =====')
 
@@ -36,6 +37,14 @@ def run_daily_scrape(app):
             logger.info('gdgpo 采集完成，新增 %d 条', count_gdgpo)
         except Exception as e:
             logger.exception('gdgpo 定时采集失败: %s', e)
+
+        # 运行环评公示爬虫
+        try:
+            scraper_eia = EiaScraper(app=app)
+            count_eia = scraper_eia.run(max_pages=3)
+            logger.info('eia 采集完成，新增 %d 条', count_eia)
+        except Exception as e:
+            logger.exception('eia 定时采集失败: %s', e)
 
         logger.info('===== 每日定时采集结束 =====')
 

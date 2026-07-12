@@ -89,6 +89,8 @@ def index():
     keywords = current_app.config.get('SCRAPER_KEYWORDS', [])
     # 各数据源官网地址（用于前端"官网"快捷跳转链接）
     source_sites = current_app.config.get('SCRAPER_SOURCE_SITES', {})
+    from scraper.eia import REGIONS as EIA_REGIONS
+    eia_all_keywords = ','.join(f'region:{k}' for k in EIA_REGIONS)
 
     return render_template(
         'scraper/panel.html',
@@ -106,6 +108,8 @@ def index():
         last_eia=last_eia,
         keywords=keywords,
         source_sites=source_sites,
+        eia_regions=EIA_REGIONS,
+        eia_all_keywords=eia_all_keywords,
         running_tasks=dict(_running_tasks),
     )
 
@@ -141,10 +145,10 @@ def run():
         keywords = None
 
     # 确定要运行的数据源（POI 产出的是 Customer 潜在客户而非 Lead 招投标线索，
-    # 与 ccgp/gdgpo 性质不同，'all' 不自动包含 poi，需单独触发）
+    # 与 ccgp/gdgpo/eia 性质不同，'all' 不自动包含 poi，需单独触发）
     task_types = []
     if task_type == 'all':
-        task_types = ['ccgp', 'gdgpo']
+        task_types = ['ccgp', 'gdgpo', 'eia']
     elif task_type in ('ccgp', 'gdgpo', 'poi', 'eia'):
         task_types = [task_type]
     else:
@@ -182,7 +186,7 @@ def run():
 def _resolve_control_task_types(task_type):
     """将 task_type ('ccgp'/'gdgpo'/'all') 解析为当前正在运行的数据源列表。"""
     if task_type == 'all':
-        candidates = ['ccgp', 'gdgpo']
+        candidates = ['ccgp', 'gdgpo', 'eia']
     elif task_type in ('ccgp', 'gdgpo', 'poi', 'eia'):
         candidates = [task_type]
     else:

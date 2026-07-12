@@ -40,18 +40,21 @@ from scraper.base import BaseScraper
 logger = logging.getLogger(__name__)
 
 # 数据源注册表：新增城市时在此追加一项即可复用同一套解析逻辑
+# 新增条目必须包含 'level' 字段（值为 'province' 或 'city'），用于前端按省级/市级分组展示
 REGIONS = {
     'guangdong': {
         'name': '广东省',
         'list_url': 'https://gdee.gd.gov.cn/jsxmsp3189/index.html',
         'page_url_pattern': 'https://gdee.gd.gov.cn/jsxmsp3189/index_{page}.html',
         'list_selector': 'ul.i_list',
+        'level': 'province',
     },
     'jiangmen': {
         'name': '江门市',
         'list_url': 'http://www.jiangmen.gov.cn/bmpd/jmssthjj/zdlyxxgk/jsxmhjyxpjxx/index.html',
         'page_url_pattern': 'http://www.jiangmen.gov.cn/bmpd/jmssthjj/zdlyxxgk/jsxmhjyxpjxx/index_{page}.html',
         'list_selector': 'ul.infoList',
+        'level': 'city',
     },
 }
 
@@ -65,6 +68,14 @@ class EiaScraper(BaseScraper):
     def default_keywords(self):
         """生成默认的 "region:地区代码" 伪关键词，覆盖所有已配置数据源"""
         return [f'region:{key}' for key in REGIONS]
+
+    def _keyword_display(self, keyword):
+        """将 region:xxx 伪关键词转换为地区名称用于进度展示。"""
+        if keyword.startswith('region:'):
+            region_key = keyword.split(':', 1)[1]
+            region = REGIONS.get(region_key)
+            return region['name'] if region else keyword
+        return keyword
 
     def run(self, keywords=None, max_pages=5):
         if not keywords:

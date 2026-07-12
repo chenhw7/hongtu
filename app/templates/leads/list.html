@@ -40,6 +40,7 @@
                     <option value="">全部</option>
                     <option value="ccgp" {{ 'selected' if source_type == 'ccgp' }}>ccgp（中国政府采购网）</option>
                     <option value="gdgpo" {{ 'selected' if source_type == 'gdgpo' }}>gdgpo（广东政府采购网）</option>
+                    <option value="eia" {{ 'selected' if source_type == 'eia' }}>eia（环评公示）</option>
                 </select>
             </div>
             <div>
@@ -172,6 +173,8 @@
                                 <span class="badge badge-accent">ccgp</span>
                                 {% elif lead.source_type == 'gdgpo' %}
                                 <span class="badge badge-green">gdgpo</span>
+                                {% elif lead.source_type == 'eia' %}
+                                <span class="badge badge-amber">eia</span>
                                 {% else %}
                                 <span class="badge badge-slate">{{ lead.source_type or '未知' }}</span>
                                 {% endif %}

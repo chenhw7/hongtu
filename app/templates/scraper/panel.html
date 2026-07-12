@@ -142,12 +142,12 @@
     <div class="scraper-card">
         <div class="scraper-card-header">
             <h3>环评公示采集（工地/项目需求）
-                {% if source_sites.eia %}
-                <a href="{{ source_sites.eia }}" target="_blank" rel="noopener" class="site-link" title="打开广东省生态环境厅建设项目环评审批公示">
+                {% for key, region in eia_regions.items() %}
+                <a href="{{ region.list_url }}" target="_blank" rel="noopener" class="site-link" title="打开{{ region.name }}环评公示页面">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                    官网
+                    {{ region.name }}
                 </a>
-                {% endif %}
+                {% endfor %}
             </h3>
             <span class="badge badge-slate">共 {{ eia_count }} 条</span>
         </div>
@@ -167,7 +167,7 @@
         </div>
         <button class="btn btn-primary btn-sm w-100 mt-2" id="btn-eia" onclick="runScraper('eia')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            立即采集（广东省 + 江门市）
+            立即采集（{% for r in eia_regions.values() %}{{ r.name }}{% if not loop.last %} + {% endif %}{% endfor %}）
         </button>
     </div>
 </div>
@@ -198,7 +198,7 @@
             地图POI采集：关键词格式为「关键词@城市」（如 <code>PVC管材@广州</code>），逗号分隔多组；留空则用配置的默认关键词 × 广东全省21个地级市。若关键词不带 <code>@城市</code>，则不限城市地对该关键词做全国搜索。
         </div>
         <div class="text-xs text-muted mt-1">
-            环评公示采集：关键词格式为「region:地区代码」（目前支持 <code>region:guangdong</code>（广东省）、<code>region:jiangmen</code>（江门市）），留空则采集全部已支持地区。新增城市需先确认该市网站结构后再接入。
+            环评公示采集：关键词格式为「region:地区代码」（目前支持 {% for key, region in eia_regions.items() %}<code>region:{{ key }}</code>（{{ region.name }}）{% if not loop.last %}、{% endif %}{% endfor %}），留空则采集全部已支持地区。新增城市需先确认该市网站结构后再接入。
         </div>
         <div class="channel-btns">
             <span class="text-xs text-muted me-2">ccgp 频道：</span>
@@ -215,9 +215,15 @@
         </div>
         <div class="channel-btns">
             <span class="text-xs text-muted me-2">环评公示地区：</span>
-            <button type="button" class="btn btn-ghost btn-xs" onclick="setChannelKeywords('eia', 'region:guangdong')">广东省</button>
-            <button type="button" class="btn btn-ghost btn-xs" onclick="setChannelKeywords('eia', 'region:jiangmen')">江门市</button>
-            <button type="button" class="btn btn-ghost btn-xs" onclick="setChannelKeywords('eia', 'region:guangdong,region:jiangmen')">广东省+江门市</button>
+            <span class="text-xs text-muted">省级</span>
+            {% for key, region in eia_regions.items() if region.level == 'province' %}
+            <button type="button" class="btn btn-ghost btn-xs" onclick="setChannelKeywords('eia', 'region:{{ key }}')">{{ region.name }}</button>
+            {% endfor %}
+            <span class="text-xs text-muted ms-2">市级</span>
+            {% for key, region in eia_regions.items() if region.level == 'city' %}
+            <button type="button" class="btn btn-ghost btn-xs" onclick="setChannelKeywords('eia', 'region:{{ key }}')">{{ region.name }}</button>
+            {% endfor %}
+            <button type="button" class="btn btn-ghost btn-xs" onclick="setChannelKeywords('eia', '{{ eia_all_keywords }}')">全部地区</button>
         </div>
     </div>
 </div>

@@ -26,7 +26,7 @@ ANNOUNCEMENT_TYPE_CHOICES = [
     '终止公告', '竞争性磋商', '竞争性谈判', '询价公告',
     '单一来源', '其他公告',
 ]
-SOURCE_TYPE_CHOICES = ['ccgp', 'gdgpo', '手动录入']
+SOURCE_TYPE_CHOICES = ['ccgp', 'gdgpo', 'eia', '手动录入']
 
 
 def _resolve_instance_file(relative_path):
