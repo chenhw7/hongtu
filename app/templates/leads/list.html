@@ -77,6 +77,13 @@
                     <option value="1" {{ 'selected' if is_converted == '1' }}>已转化</option>
                 </select>
             </div>
+            <div>
+                <span class="filter-label">收藏</span>
+                <select name="is_favorited" class="filter-select">
+                    <option value="">全部</option>
+                    <option value="1" {% if is_favorited == '1' %}selected{% endif %}>仅看收藏</option>
+                </select>
+            </div>
             <div style="flex:1;min-width:150px">
                 <span class="filter-label">关键词搜索</span>
                 <input type="text" name="q" class="search-input" placeholder="项目名称/采购单位/联系人" value="{{ q or '' }}">
@@ -143,6 +150,13 @@
                             </td>
                             <td class="cell-muted">{{ (leads.page - 1) * leads.per_page + loop.index }}</td>
                             <td class="cell-project-name">
+                                <button type="button" class="btn-favorite {% if lead.is_favorited %}is-active{% endif %}"
+                                        data-lead-id="{{ lead.id }}"
+                                        title="{% if lead.is_favorited %}取消收藏{% else %}收藏{% endif %}">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                                    </svg>
+                                </button>
                                 <a href="{{ url_for('leads.detail', id=lead.id) }}" class="cell-link" title="{{ lead.project_name or '' }}">{{ lead.project_name or '—' }}</a>
                                 {% if lead.announcement_type %}
                                 <div><span class="badge badge-slate text-xs">{{ lead.announcement_type }}</span></div>
@@ -263,5 +277,34 @@ function changePageSize(size) {
     url.searchParams.set('page', 1);
     window.location.href = url.toString();
 }
+
+// 收藏切换
+document.querySelectorAll('.btn-favorite').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var leadId = this.getAttribute('data-lead-id');
+        var btnEl = this;
+        fetch('/leads/' + leadId + '/favorite', {
+            method: 'POST',
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            if (data.success) {
+                if (data.is_favorited) {
+                    btnEl.classList.add('is-active');
+                    btnEl.setAttribute('title', '取消收藏');
+                } else {
+                    btnEl.classList.remove('is-active');
+                    btnEl.setAttribute('title', '收藏');
+                }
+            }
+        })
+        .catch(function(err) {
+            console.error('收藏操作失败:', err);
+        });
+    });
+});
 </script>
 {% endblock %}

@@ -8,7 +8,7 @@ from io import BytesIO
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for, flash, send_file,
-    send_from_directory, abort, current_app, Response,
+    send_from_directory, abort, current_app, Response, jsonify,
 )
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -100,7 +100,7 @@ def _parse_budget(value):
         return None
 
 
-def _apply_filters(query):
+def _apply_filters(query, is_favorited=None):
     """公共方法：对查询对象应用筛选条件"""
     # 默认排除已软删除的线索
     query = query.filter(Lead.deleted == False)  # noqa: E712
@@ -121,6 +121,9 @@ def _apply_filters(query):
 
     if region:
         query = query.filter(Lead.region == region)
+
+    if is_favorited == '1':
+        query = query.filter(Lead.is_favorited == True)  # noqa: E712
 
     if is_converted == '0':
         query = query.filter(Lead.is_converted == False)  # noqa: E712
@@ -166,6 +169,7 @@ def index():
     date_to = request.args.get('date_to', '', type=str)
     announcement_type = request.args.get('announcement_type', '', type=str)
     region = request.args.get('region', '', type=str)
+    is_favorited = request.args.get('is_favorited')
     sort = request.args.get('sort', 'publish_date', type=str)
     order = request.args.get('order', 'desc', type=str)
 
@@ -180,7 +184,7 @@ def index():
     sort_col = SORT_WHITELIST.get(sort, Lead.publish_date)
     is_desc = order == 'desc'
 
-    query = _apply_filters(Lead.query)
+    query = _apply_filters(Lead.query, is_favorited=is_favorited)
 
     # 日期/可空字段 null 值排在最后（升序）或最前（降序）
     if sort in ('publish_date', 'deadline'):
@@ -225,6 +229,8 @@ def index():
         query_args['announcement_type'] = announcement_type
     if region:
         query_args['region'] = region
+    if is_favorited:
+        query_args['is_favorited'] = is_favorited
     query_args['per_page'] = per_page
 
     return render_template('leads/list.html',
@@ -236,6 +242,7 @@ def index():
                            date_to=date_to,
                            announcement_type=announcement_type,
                            region=region,
+                           is_favorited=is_favorited,
                            announcement_types=announcement_types,
                            regions=regions,
                            query_args=query_args,
@@ -379,7 +386,7 @@ def batch_convert():
 @leads.route('/export')
 def export():
     """导出Excel - 导出当前筛选条件下的所有线索"""
-    query = _apply_filters(Lead.query)
+    query = _apply_filters(Lead.query, is_favorited=request.args.get('is_favorited'))
     leads_list = query.order_by(Lead.publish_date.desc().nullslast()).all()
 
     wb = Workbook()
@@ -554,3 +561,27 @@ def delete(id):
         db.session.rollback()
         flash('操作失败，请重试', 'error')
     return redirect(url_for('leads.index'))
+
+
+@leads.route('/<int:lead_id>/favorite', methods=['POST'])
+def favorite(lead_id):
+    """切换线索收藏状态"""
+    lead = Lead.query.get_or_404(lead_id)
+    lead.is_favorited = not lead.is_favorited
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        # AJAX 请求返回 JSON 错误
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': '操作失败'}), 500
+        flash('操作失败', 'error')
+        return redirect(url_for('leads.detail', id=lead_id))
+
+    # AJAX 请求返回 JSON
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'success': True, 'is_favorited': lead.is_favorited})
+
+    # 传统表单提交，重定向回详情页
+    flash('已取消收藏' if not lead.is_favorited else '已收藏', 'success')
+    return redirect(url_for('leads.detail', id=lead_id))

@@ -81,6 +81,7 @@ class Lead(db.Model):
     is_converted = db.Column(db.Boolean, default=False, comment='是否已转为客户')
     converted_customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True, comment='转换后的客户ID')
     deleted = db.Column(db.Boolean, default=False, comment='软删除标记')
+    is_favorited = db.Column(db.Boolean, default=False, comment='是否收藏')
     created_at = db.Column(db.DateTime, default=datetime.now)
 
     attachments = db.relationship('Attachment', backref='lead', lazy='dynamic', cascade='all, delete-orphan')

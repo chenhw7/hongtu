@@ -142,12 +142,13 @@
     <div class="scraper-card">
         <div class="scraper-card-header">
             <h3>环评公示采集（工地/项目需求）
-                {% for key, region in eia_regions.items() %}
+                {% for key, region in eia_regions.items() if region.level == 'province' %}
                 <a href="{{ region.list_url }}" target="_blank" rel="noopener" class="site-link" title="打开{{ region.name }}环评公示页面">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                     {{ region.name }}
                 </a>
                 {% endfor %}
+                <span class="text-xs text-muted ms-1">+ {{ eia_regions|length - 1 }} 个市级</span>
             </h3>
             <span class="badge badge-slate">共 {{ eia_count }} 条</span>
         </div>
@@ -167,7 +168,7 @@
         </div>
         <button class="btn btn-primary btn-sm w-100 mt-2" id="btn-eia" onclick="runScraper('eia')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            立即采集（{% for r in eia_regions.values() %}{{ r.name }}{% if not loop.last %} + {% endif %}{% endfor %}）
+            立即采集（全部 {{ eia_regions|length }} 个地区）
         </button>
     </div>
 </div>

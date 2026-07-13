@@ -8,6 +8,9 @@ class Config:
     # 爬虫配置
     SCRAPE_DELAY_MIN = 3
     SCRAPE_DELAY_MAX = 5
+    # EIA环评公示采集专用延迟（静态政府网站无限流，可安全降低）
+    EIA_DELAY_MIN = 1
+    EIA_DELAY_MAX = 2
     SCRAPE_MAX_RETRIES = 3
     SCRAPE_CHECK_ROBOTS = False  # ccgp/gdgpo 无可用 robots.txt，检查反而触发反爬
     SCRAPE_ANTI_SCRAPE_WAIT = 60  # 检测到反爬/请求失败后的等待时间（秒）

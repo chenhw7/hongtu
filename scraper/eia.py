@@ -56,6 +56,78 @@ REGIONS = {
         'list_selector': 'ul.infoList',
         'level': 'city',
     },
+    # --- 以下为新增地级市（2026-07扩展） ---
+    'heyuan': {
+        'name': '河源市',
+        'list_url': 'http://www.heyuan.gov.cn/zwgk/zdlyxx/hjbh/jsxmhjyxpjxx/index.html',
+        'list_selector': 'ul.list',
+        'level': 'city',
+    },
+    'zhanjiang': {
+        'name': '湛江市',
+        'list_url': 'https://www.zhanjiang.gov.cn/zdlyxxgk/sthj/jsxmhjyx/index.html',
+        'list_selector': 'ul.list',
+        'level': 'city',
+    },
+    'shaoguan': {
+        'name': '韶关市',
+        'list_url': 'https://www.sg.gov.cn/zw/zdlyxxgk/dzjg/sgssthjj/hjbhxxgk/jsxmhjyxpjxx/index.html',
+        'list_selector': 'div.pageList ul',
+        'level': 'city',
+    },
+    'jieyang': {
+        'name': '揭阳市',
+        'list_url': 'http://www.jieyang.gov.cn/jyhbj/hjyw/jsxmhbslyspgs/index.html',
+        'list_selector': 'ul#lmunes',
+        'level': 'city',
+    },
+    'shanwei': {
+        'name': '汕尾市',
+        'list_url': 'https://www.shanwei.gov.cn/swhbj/459/515/zdly/hjbh03/index.html',
+        'list_selector': 'div.newsclass ul',
+        'level': 'city',
+    },
+    'yangjiang': {
+        'name': '阳江市',
+        'list_url': 'http://www.yangjiang.gov.cn/yj/zwgk/zdlyxxgk/hjbh/jsxmhjyxpjxx/index.html',
+        'list_selector': 'ul.list',
+        'level': 'city',
+    },
+    'shantou': {
+        'name': '汕头市',
+        'list_url': 'https://www.shantou.gov.cn/cnst/zdly/hjbhxxgk/index.html',
+        'list_selector': 'div.list_div',
+        'item_selector': True,  # 非ul/li结构，每个div.list_div直接作为条目
+        'level': 'city',
+    },
+    'huizhou': {
+        'name': '惠州市',
+        'list_url': 'http://www.huizhou.gov.cn/zdlyxxgk/hjbhxxgk/jsxmhjyxpjxx/index.html',
+        'list_selector': 'ul.list',  # 与河源/湛江同一CMS模板，待实测确认
+        'level': 'city',
+    },
+    'foshan': {
+        'name': '佛山市',
+        'list_url': 'http://sthj.foshan.gov.cn/hjyxpj/hpspgs/hpslgg/index.html',
+        'list_selector': 'div.list-content2',
+        'level': 'city',
+    },
+    'zhongshan': {
+        'name': '中山市',
+        'list_url': 'http://zsepb.zs.gov.cn/xxml/ztzl/gcjslyxmxx/ssthjjhpspgs/slgs/index.html',
+        'list_selector': 'ul.pub_list',
+        'level': 'city',
+    },
+    'yunfu': {
+        'name': '云浮市',
+        'list_url': 'https://www.yunfu.gov.cn/sthjj/zdlyxxgkzl/jsxmhjyxpj/slgg/index.html',
+        'list_selector': 'div.nyrtct ul',
+        'level': 'city',
+    },
+    # --- 以下城市暂未接入 ---
+    # 广州: 网站为JS渲染，httpx无法获取列表内容
+    # 东莞: 网站为JS渲染，httpx无法获取列表内容
+    # 深圳/珠海/梅州/茂名/肇庆/清远/潮州: 未找到标准环评公示列表页
 }
 
 _ATTACHMENT_EXT_RE = re.compile(r'\.(pdf|doc|docx|xls|xlsx|zip|rar|7z|txt)(\?|$)', re.IGNORECASE)
@@ -64,6 +136,12 @@ _ATTACHMENT_EXT_RE = re.compile(r'\.(pdf|doc|docx|xls|xlsx|zip|rar|7z|txt)(\?|$)
 class EiaScraper(BaseScraper):
     source_type = 'eia'
     base_url = 'https://gdee.gd.gov.cn/jsxmsp3189/'
+
+    def __init__(self, app=None):
+        super().__init__(app=app)
+        if app is not None:
+            self.delay_min = app.config.get('EIA_DELAY_MIN', self.delay_min)
+            self.delay_max = app.config.get('EIA_DELAY_MAX', self.delay_max)
 
     def default_keywords(self):
         """生成默认的 "region:地区代码" 伪关键词，覆盖所有已配置数据源"""
@@ -89,7 +167,13 @@ class EiaScraper(BaseScraper):
             logger.error('[eia] 无效的地区代码: %s', keyword)
             return None
 
-        list_url = region['list_url'] if page == 1 else region['page_url_pattern'].format(page=page)
+        if page == 1:
+            list_url = region['list_url']
+        else:
+            page_pattern = region.get('page_url_pattern')
+            if not page_pattern:
+                page_pattern = region['list_url'].replace('index.html', 'index_{page}.html')
+            list_url = page_pattern.format(page=page)
         _, soup = self.fetch_html(list_url)
         if soup is None:
             # 列表页请求失败：既可能是页码越界(404，正常终止翻页)，也可能是
@@ -100,8 +184,12 @@ class EiaScraper(BaseScraper):
         uls = soup.select(region['list_selector'])
         if not uls:
             return []
-        main_ul = max(uls, key=lambda u: len(u.find_all('li')))
-        items = main_ul.find_all('li')
+        # 支持非ul/li结构：若配置了item_selector，list_selector直接选择条目元素
+        if region.get('item_selector'):
+            items = uls
+        else:
+            main_ul = max(uls, key=lambda u: len(u.find_all('li')))
+            items = main_ul.find_all('li')
         if not items:
             return []
 
@@ -140,7 +228,11 @@ class EiaScraper(BaseScraper):
                 return datetime.strptime(text, fmt).date()
             except ValueError:
                 continue
-        return None
+        # 佛山市日期格式为 MM-DD（无年份），自动补当前年份
+        try:
+            return datetime.strptime(f'{datetime.now().year}-{text}', '%Y-%m-%d').date()
+        except ValueError:
+            return None
 
     @staticmethod
     def _classify_category(title):

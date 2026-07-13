@@ -215,6 +215,8 @@ a:hover { text-decoration: underline; }
 .btn-danger:hover { background: var(--red-soft); border-color: var(--red); }
 .btn-success { background: var(--green); color: #fff; border-color: var(--green); }
 .btn-success:hover { background: #157a4a; border-color: #157a4a; }
+.btn-warning { background: var(--amber); color: #fff; border-color: var(--amber); }
+.btn-warning:hover { background: #a66a08; border-color: #a66a08; }
 .btn-sm { padding: 3px 8px; font-size: 11px; }
 .btn-xs { padding: 2px 7px; font-size: 11px; border-radius: 4px; }
 .btn svg { flex-shrink: 0; }
@@ -845,4 +847,42 @@ textarea.form-control { resize: vertical; }
   .scraper-grid { grid-template-columns: 1fr; }
   .form-row > * { min-width: 100%; }
   .stat-value { font-size: 20px; }
+}
+
+/* ============================================================
+   收藏星标按钮
+   ============================================================ */
+.btn-favorite {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: var(--slate, #6b7280);
+    padding: 0;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
+.btn-favorite:hover {
+    background: var(--amber-soft, #fef7e7);
+    color: var(--amber, #c2780a);
+}
+
+.btn-favorite.is-active {
+    color: var(--amber, #c2780a);
+}
+
+.btn-favorite.is-active svg {
+    fill: currentColor;
+}
+
+.btn-favorite svg {
+    fill: none;
+    transition: fill 0.15s ease;
 }

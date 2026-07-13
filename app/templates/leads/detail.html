@@ -108,6 +108,11 @@
     <div style="width:300px;flex-shrink:0">
         <div class="detail-card">
             <h5>操作</h5>
+            <form method="POST" action="{{ url_for('leads.favorite', lead_id=lead.id) }}" class="favorite-form mb-2">
+                <button type="submit" class="btn {% if lead.is_favorited %}btn-warning{% else %}btn-secondary{% endif %} w-100">
+                    {% if lead.is_favorited %}★ 取消收藏{% else %}☆ 收藏{% endif %}
+                </button>
+            </form>
             {% if lead.is_converted %}
                 <div class="text-center py-3">
                     <span style="font-size:2.5rem">✅</span>

@@ -27,6 +27,7 @@ def _ensure_schema_upgrades(app):
         'announcement_type': 'VARCHAR(50)',
         'region': 'VARCHAR(50)',
         'deleted': 'BOOLEAN DEFAULT 0',
+        'is_favorited': 'BOOLEAN DEFAULT 0',
     }
 
     try:
