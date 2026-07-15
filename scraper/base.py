@@ -12,6 +12,7 @@ from urllib.robotparser import RobotFileParser
 
 import httpx
 from bs4 import BeautifulSoup
+from sqlalchemy.exc import IntegrityError
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +137,14 @@ class BaseScraper:
     # ------------------------------------------------------------------
     # HTTP 请求
     # ------------------------------------------------------------------
-    def fetch(self, url, params=None, max_retries=3, extra_headers=None):
+    def fetch(
+        self,
+        url,
+        params=None,
+        max_retries=3,
+        extra_headers=None,
+        return_error_response=False,
+    ):
         """发起HTTP请求，带重试和限速
 
         Args:
@@ -145,6 +153,8 @@ class BaseScraper:
             max_retries: 最大重试次数
             extra_headers: 额外/覆盖的请求头（如需要 Accept: application/json 的
                 JSON API，会话默认 Accept 头偏向 HTML，需要显式覆盖）
+            return_error_response: 为 True 时返回最终的非 200 响应，供调用方区分
+                正常 404 翻页结束与其他错误；默认 False 保持原有行为
 
         Returns:
             httpx.Response 或 None
@@ -159,6 +169,7 @@ class BaseScraper:
 
         retries = max_retries if max_retries else self.max_retries
 
+        last_error_response = None
         for attempt in range(1, retries + 1):
             try:
                 # 限速：每次请求前随机延迟
@@ -179,6 +190,7 @@ class BaseScraper:
                         response.encoding = response.charset_encoding or 'utf-8'
                     return response
                 else:
+                    last_error_response = response
                     logger.warning('[%s] HTTP %d: %s', self.source_type, response.status_code, url)
                     # 被限流时等待更久
                     if response.status_code in (429, 503):
@@ -186,7 +198,7 @@ class BaseScraper:
                         time.sleep(wait)
                     elif response.status_code >= 400:
                         # 客户端/服务端错误，不再重试
-                        return None
+                        return response if return_error_response else None
 
             except httpx.TimeoutException:
                 logger.warning('[%s] 请求超时 (第%d次): %s', self.source_type, attempt, url)
@@ -204,6 +216,8 @@ class BaseScraper:
                 time.sleep(backoff)
 
         logger.error('[%s] 请求最终失败，已达最大重试次数: %s', self.source_type, url)
+        if return_error_response and last_error_response is not None:
+            return last_error_response
         return None
 
     def fetch_soup(self, url, params=None, max_retries=None):
@@ -363,10 +377,29 @@ class BaseScraper:
             try:
                 db.session.commit()
                 new_count += 1
+            except IntegrityError as exc:
+                db.session.rollback()
+                if 'unique constraint' in str(exc).lower() or 'duplicate entry' in str(exc).lower():
+                    logger.warning(
+                        '[%s] 保存线索触发唯一约束，跳过: %s',
+                        source_type,
+                        item.get('bidding_number', item.get('project_name', '')),
+                    )
+                    continue
+                logger.exception(
+                    '[%s] 保存线索发生完整性错误: %s',
+                    source_type,
+                    item.get('bidding_number', item.get('project_name', '')),
+                )
+                raise
             except Exception:
                 db.session.rollback()
-                logger.warning('[%s] 保存线索失败（可能重复）: %s', source_type, item.get('bidding_number', item.get('project_name', '')))
-                continue
+                logger.exception(
+                    '[%s] 保存线索发生数据库错误: %s',
+                    source_type,
+                    item.get('bidding_number', item.get('project_name', '')),
+                )
+                raise
 
             # 保存详情页HTML快照：公告在官网被撤回/修改后仍可本地留档追溯
             if raw_html and self._config_flag('SCRAPE_SAVE_SNAPSHOT', True):
@@ -579,6 +612,7 @@ class BaseScraper:
 
         total_new = 0
         done_pages = 0
+        failed_units = []
         try:
             self._create_session()
 
@@ -601,12 +635,16 @@ class BaseScraper:
 
                     if leads_data is None:
                         # 请求失败或被拦截
+                        failed_units.append(
+                            '%s 第%d页' % (self._keyword_display(keyword), page)
+                        )
                         logger.warning('[%s] 第%d页采集失败，等待%ds后跳过关键词「%s」',
                                        self.source_type, page, self.anti_scrape_wait, keyword)
                         # 跳过该关键词剩余页，计入已完成页数以推进进度
                         done_pages += (max_pages - page + 1)
                         self._progress_update(done_pages=done_pages)
-                        time.sleep(self.anti_scrape_wait)
+                        if self.anti_scrape_wait > 0:
+                            time.sleep(self.anti_scrape_wait)
                         break
 
                     if len(leads_data) == 0:
@@ -629,10 +667,22 @@ class BaseScraper:
                                 % (self._keyword_display(keyword), page, new_count, total_new),
                     )
 
-            # 4. 更新任务状态
-            self.update_task(task_id, '完成', result_count=total_new)
-            self._progress_finish('完成', collected=total_new)
-            logger.info('[%s] 采集完成，共新增 %d 条线索', self.source_type, total_new)
+            # 4. 更新任务状态。允许其他关键词在单个关键词失败后继续采集，但最终
+            # 必须如实标记失败，不能把部分缺数的任务显示成“完成”。
+            if failed_units:
+                error_msg = '以下采集单元失败: ' + '；'.join(failed_units)
+                self.update_task(
+                    task_id,
+                    '失败',
+                    result_count=total_new,
+                    error_msg=error_msg,
+                )
+                self._progress_finish('失败', collected=total_new, error_msg=error_msg)
+                logger.warning('[%s] 采集部分失败，共新增 %d 条: %s', self.source_type, total_new, error_msg)
+            else:
+                self.update_task(task_id, '完成', result_count=total_new)
+                self._progress_finish('完成', collected=total_new)
+                logger.info('[%s] 采集完成，共新增 %d 条线索', self.source_type, total_new)
             return total_new
 
         except ScraperStopped:

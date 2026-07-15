@@ -1,0 +1,20 @@
+{
+  "code": 0,
+  "data": {
+    "total": 1,
+    "list": [
+      {
+        "ID": "SLGG-test-001",
+        "PROJECT_NAME": "广州市测试建设项目",
+        "CONSTRUCTION_UNIT": "广州测试建设有限公司",
+        "CONSTRUCTION_LOCATION": "广州市南沙区测试路1号",
+        "ENV_ASSESSMENT_UNIT": "广东测试环评有限公司",
+        "ENV_DOC_TYPE": "环境影响报告表",
+        "ACCEPTANCE_DATE": "2026-07-14 00:00:00",
+        "PUBLISH_DATE": "2026-07-14 09:30:00",
+        "FILELIST": "[{\"url\":\"/uploads/hpslgl/test.pdf\",\"name\":\"测试项目公示稿.pdf\"}]",
+        "REMARK": "公告期限为五个工作日，联系电话：020-12345678。"
+      }
+    ]
+  }
+}

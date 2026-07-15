@@ -148,7 +148,14 @@
                     {{ region.name }}
                 </a>
                 {% endfor %}
-                <span class="text-xs text-muted ms-1">+ {{ eia_regions|length - 1 }} 个市级</span>
+                <div class="eia-city-links text-xs mt-1">
+                    {% for key, region in eia_regions.items() if region.level == 'city' %}
+                    <a href="{{ region.list_url }}" target="_blank" rel="noopener" class="site-link site-link-sm" title="打开{{ region.name }}环评公示页面">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        {{ region.name }}
+                    </a>
+                    {% endfor %}
+                </div>
             </h3>
             <span class="badge badge-slate">共 {{ eia_count }} 条</span>
         </div>

@@ -8,9 +8,14 @@ class Config:
     # 爬虫配置
     SCRAPE_DELAY_MIN = 3
     SCRAPE_DELAY_MAX = 5
-    # EIA环评公示采集专用延迟（静态政府网站无限流，可安全降低）
+    # EIA环评公示混合静态页面和公开接口，保持低并发、逐请求限速
     EIA_DELAY_MIN = 1
     EIA_DELAY_MAX = 2
+    EIA_ANTI_SCRAPE_WAIT = 0  # 接口/schema 失败直接记录，不按通用反爬策略额外等待
+    # 东莞列表第4页起需要验证码，日常用最近2天窗口并在采集器内按日期/受理号分片
+    EIA_DONGGUAN_LOOKBACK_DAYS = 2
+    # 肇庆首次全量采集（DB 无历史 lead 时不设日期过滤），后续走增量窗口
+    EIA_ZHAOQING_LOOKBACK_DAYS = 3
     SCRAPE_MAX_RETRIES = 3
     SCRAPE_CHECK_ROBOTS = False  # ccgp/gdgpo 无可用 robots.txt，检查反而触发反爬
     SCRAPE_ANTI_SCRAPE_WAIT = 60  # 检测到反爬/请求失败后的等待时间（秒）

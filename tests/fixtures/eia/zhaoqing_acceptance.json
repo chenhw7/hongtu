@@ -1,0 +1,33 @@
+{
+  "classify": {
+    "id": 21023,
+    "name": "受理公告",
+    "parent": 21022,
+    "post_count": 203,
+    "theme_count": 203
+  },
+  "articles": [
+    {
+      "id": 3255421,
+      "identifier": "11441200MB2C91453G/2026-00271",
+      "title": "金宸农牧科技（四会）有限公司四会富硒蛋鸡产业园项目受理公告",
+      "date": 1783353600,
+      "publisher": "肇庆市生态环境局",
+      "classify_main": 21023,
+      "classify_main_name": "受理公告",
+      "url": "https://www.zhaoqing.gov.cn/zqhjj/gkmlpt/content/3/3255/post_3255421.html",
+      "created_at": "2026-07-07 10:48:49",
+      "attachment": []
+    },
+    {
+      "id": 3253080,
+      "title": "肇庆市生态环境局关于2026年6月29日建设项目环境影响评价文件受理情况的公告",
+      "date": 1782662400,
+      "publisher": "肇庆市生态环境局",
+      "classify_main": 21023,
+      "classify_main_name": "受理公告",
+      "url": "https://www.zhaoqing.gov.cn/zqhjj/gkmlpt/content/3/3253/post_3253080.html",
+      "attachment": []
+    }
+  ]
+}
