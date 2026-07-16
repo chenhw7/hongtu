@@ -215,13 +215,22 @@ class GdgpoScraper(BaseScraper):
             return []
 
         leads = []
-        for row in rows:
+        lead_skeletons = [self._row_to_lead(row) for row in rows]
+        existing_keys = self._prefetch_existing_keys(lead_skeletons)
+        skipped = 0
+        for row, lead in zip(rows, lead_skeletons):
             self._check_pause_and_stop()
-            lead = self._row_to_lead(row)
+            key = self._lead_dedup_key(lead)
+            if key and key in existing_keys:
+                skipped += 1
+                leads.append(lead)  # 保留列表页字段，不请求详情
+                continue
             detail = self._fetch_detail(row.get('id'))
             if detail:
                 lead.update(detail)
             leads.append(lead)
+        if skipped:
+            logger.info('[gdgpo] 跳过 %d 条已存在项的详情请求', skipped)
 
         logger.info('[gdgpo] 第 %d 页解析到 %d 条结果', page, len(leads))
         return leads
@@ -268,13 +277,22 @@ class GdgpoScraper(BaseScraper):
             return []
 
         leads = []
-        for row in rows:
+        lead_skeletons = [self._gpfa_row_to_lead(row) for row in rows]
+        existing_keys = self._prefetch_existing_keys(lead_skeletons)
+        skipped = 0
+        for row, lead in zip(rows, lead_skeletons):
             self._check_pause_and_stop()
-            lead = self._gpfa_row_to_lead(row)
+            key = self._lead_dedup_key(lead)
+            if key and key in existing_keys:
+                skipped += 1
+                leads.append(lead)  # 保留列表页字段，不请求详情
+                continue
             detail = self._fetch_gpfa_detail(row.get('path'))
             if detail:
                 lead.update(detail)
             leads.append(lead)
+        if skipped:
+            logger.info('[gdgpo] gpfa 跳过 %d 条已存在项的详情请求', skipped)
 
         logger.info('[gdgpo] gpfa 第 %d 页解析到 %d 条结果', page, len(leads))
         return leads

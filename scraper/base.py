@@ -52,6 +52,9 @@ class BaseScraper:
         self.app = app
         self.session = None
         self._robots_cache = {}  # 域名 -> RobotFileParser
+        # 本次 run() 内已处理过的去重 key（跨关键词共享，run() 开头重置）。
+        # 仅作为进程内缓存，跨 run 的去重由 save_leads 查 DB 兜底。
+        self._seen_keys = set()
         if app is not None:
             self.delay_min = app.config.get('SCRAPE_DELAY_MIN', 3)
             self.delay_max = app.config.get('SCRAPE_DELAY_MAX', 5)
@@ -420,6 +423,90 @@ class BaseScraper:
         return new_count
 
     # ------------------------------------------------------------------
+    # 请求详情页前的批量去重（消除跨关键词/跨页/跨天的重复详情请求）
+    # ------------------------------------------------------------------
+    # 与 save_leads（同文件上方）的去重语义逐字对齐：bidding_number 非空按
+    # bidding_number 判定，否则按 (project_name, buyer_name) 联合判定。
+    # 判断不了（缺 key）一律返回 None，调用方据此回退为「请求详情页」，不漏抓。
+    @staticmethod
+    def _lead_dedup_key(item):
+        """从 lead dict 提取去重 key，与 save_leads 入库去重语义一致。
+
+        Returns:
+            ('bid', bidding_number) | ('pn', project_name, buyer_name) | None
+            None 表示无法去重，调用方应照常请求详情页。
+        """
+        bidding_number = (item.get('bidding_number') or '').strip()
+        if bidding_number:
+            return ('bid', bidding_number)
+        project_name = (item.get('project_name') or '').strip()
+        if project_name:
+            return ('pn', project_name, (item.get('buyer_name') or '').strip())
+        return None
+
+    def _prefetch_existing_keys(self, leads):
+        """批量预查一页 lead 中「已存在」的去重 key（DB + 进程内缓存）。
+
+        供 ccgp/gdgpo 在请求详情页之前调用：key 命中的 lead 跳过详情请求，
+        保留列表页字段直接返回，由 save_leads 兜底去重入库。
+
+        Args:
+            leads: 一页的 lead dict 列表（列表页字段，尚未请求详情）
+
+        Returns:
+            set: 已存在的 key（与 _lead_dedup_key 同形态）。查询异常时返回
+            空 set，调用方回退为「全部请求详情」，绝不漏抓。
+        """
+        from app.models import Lead
+        from sqlalchemy import tuple_
+
+        existing = set()
+        bid_keys = []      # 待查的 bidding_number
+        pn_pairs = []      # 待查的 (project_name, buyer_name)
+        for lead in leads or []:
+            key = self._lead_dedup_key(lead)
+            if key is None:
+                continue
+            if key in self._seen_keys:
+                existing.add(key)  # 进程内缓存命中，直接计入
+                continue
+            if key[0] == 'bid':
+                bid_keys.append(key[1])
+            else:
+                pn_pairs.append((key[1], key[2]))
+
+        try:
+            # 1) bidding_number 单列 IN 批量查
+            if bid_keys:
+                rows = (
+                    Lead.query.filter(Lead.bidding_number.in_(bid_keys))
+                    .with_entities(Lead.bidding_number)
+                    .all()
+                )
+                for (b,) in rows:
+                    existing.add(('bid', b))
+            # 2) (project_name, buyer_name) 多列 IN 批量查（SQLite + SA2.0 支持）
+            if pn_pairs:
+                rows = (
+                    Lead.query.filter(
+                        tuple_(Lead.project_name, Lead.buyer_name).in_(pn_pairs)
+                    )
+                    .with_entities(Lead.project_name, Lead.buyer_name)
+                    .all()
+                )
+                for pn, bn in rows:
+                    existing.add(('pn', pn, bn))
+        except Exception:
+            # 查询失败时回退为「都不命中」，调用方将对本页全部请求详情
+            logger.exception('[%s] 前置去重预查失败，本页回退为全量请求详情',
+                            self.source_type)
+            return set()
+
+        # 命中的 key 计入进程内缓存，后续关键词命中时免查 DB
+        self._seen_keys |= existing
+        return existing
+
+    # ------------------------------------------------------------------
     # 网页快照与附件下载
     # ------------------------------------------------------------------
     _UNSAFE_FILENAME_RE = re.compile(r'[\\/:*?"<>|\r\n\t]+')
@@ -615,6 +702,8 @@ class BaseScraper:
         total_new = 0
         done_pages = 0
         failed_units = []
+        # 重置进程内去重缓存：本次 run 的 key 独立，不污染跨次采集
+        self._seen_keys = set()
         try:
             self._create_session()
 

@@ -66,14 +66,24 @@ def scrape_search_page(scraper, keyword, page, zone_id=None):
     if leads is None:
         return []
 
-    # 逐条访问详情页补充信息
+    # 逐条访问详情页补充信息（已存在的项先批量跳过，避免重复请求详情）
+    existing_keys = scraper._prefetch_existing_keys(leads)
     detailed_leads = []
+    skipped = 0
     for lead in leads:
+        scraper._check_pause_and_stop()
+        key = scraper._lead_dedup_key(lead)
+        if key and key in existing_keys:
+            skipped += 1
+            detailed_leads.append(lead)  # 保留列表页字段，不请求详情
+            continue
         detail_url = lead.get('source_url', '')
         if detail_url:
             detail_data = scraper._fetch_detail(detail_url)
             if detail_data:
                 lead.update(detail_data)
         detailed_leads.append(lead)
+    if skipped:
+        logger.info('[ccgp] 跳过 %d 条已存在项的详情请求', skipped)
 
     return detailed_leads
