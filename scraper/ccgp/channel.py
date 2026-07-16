@@ -86,6 +86,10 @@ def scrape_channel_page(scraper, channel, page, region_code=None):
             return None
 
         leads = parse_search_results(scraper, soup)
+        # 分省频道：从 region_code 参数直接赋值 region（搜索结果 HTML 不含地域信息）
+        region_name = region['name']
+        for lead in leads:
+            lead.setdefault('region', region_name)
     else:
         url = build_channel_url(channel, page)
         soup = scraper.fetch_soup(url)
