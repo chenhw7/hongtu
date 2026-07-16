@@ -14,6 +14,8 @@ import httpx
 from bs4 import BeautifulSoup
 from sqlalchemy.exc import IntegrityError
 
+from scraper.utils import safe_filename as _safe_filename_impl
+
 logger = logging.getLogger(__name__)
 
 # 随机 User-Agent 池
@@ -430,11 +432,11 @@ class BaseScraper:
 
     @staticmethod
     def _safe_filename(name, default='attachment'):
-        """清理文件名中的路径分隔符等危险字符，防止路径穿越"""
-        name = (name or '').strip()
-        name = BaseScraper._UNSAFE_FILENAME_RE.sub('_', name)
-        name = name.strip('. ')
-        return name[:150] if name else default
+        """清理文件名中的路径分隔符等危险字符，防止路径穿越。
+
+        委托给 scraper/utils.py 中的实现，避免重复定义。
+        """
+        return _safe_filename_impl(name, default)
 
     def _save_snapshot(self, lead_id, html):
         """保存详情页原始HTML到 instance 目录，返回相对路径"""

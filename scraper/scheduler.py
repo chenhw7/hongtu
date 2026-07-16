@@ -25,7 +25,7 @@ def run_daily_scrape(app):
         # 运行中国政府采购网爬虫
         try:
             scraper_ccgp = CcgpScraper(app=app)
-            count_ccgp = scraper_ccgp.run(max_pages=3)
+            count_ccgp = scraper_ccgp.run()
             logger.info('ccgp 采集完成，新增 %d 条', count_ccgp)
         except Exception as e:
             logger.exception('ccgp 定时采集失败: %s', e)

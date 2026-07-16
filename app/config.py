@@ -19,6 +19,8 @@ class Config:
     SCRAPE_MAX_RETRIES = 3
     SCRAPE_CHECK_ROBOTS = False  # ccgp/gdgpo 无可用 robots.txt，检查反而触发反爬
     SCRAPE_ANTI_SCRAPE_WAIT = 60  # 检测到反爬/请求失败后的等待时间（秒）
+    # 默认搜索关键词（各采集器优先使用 scraper/keywords.py 中的分类关键词，
+    # 此配置仅作为 BaseScraper.run() 未收到 keywords 参数时的兜底默认值）
     SCRAPER_KEYWORDS = ['管道', 'PVC管', 'HDPE管', 'PPR管', '给排水', '市政管道', '塑料管']
     # 各数据源官网地址（用于前端面板"官网"快捷跳转链接，新增数据源时在此追加即可）
     SCRAPER_SOURCE_SITES = {

@@ -92,6 +92,10 @@ def index():
     from scraper.eia import REGIONS as EIA_REGIONS
     eia_all_keywords = ','.join(f'region:{k}' for k in EIA_REGIONS)
 
+    # 关键词统计（用于前端 placeholder 展示）
+    from scraper.keywords import CCGP_KEYWORDS_FINAL
+    ccgp_keywords_count = len(CCGP_KEYWORDS_FINAL)
+
     return render_template(
         'scraper/panel.html',
         total_leads=total_leads,
@@ -107,6 +111,7 @@ def index():
         last_poi=last_poi,
         last_eia=last_eia,
         keywords=keywords,
+        ccgp_keywords_count=ccgp_keywords_count,
         source_sites=source_sites,
         eia_regions=EIA_REGIONS,
         eia_all_keywords=eia_all_keywords,

@@ -1,29 +1,18 @@
 # -*- coding: utf-8 -*-
-"""环评公示采集公共工具函数（纯函数，无外部依赖）。"""
+"""环评公示采集公共工具函数（纯函数，无外部依赖）。
+
+通用日期解析和附件提取已上提到 scraper/utils.py，此处重新导出方便各适配器引用。
+"""
 import json
 import logging
 import re
 from datetime import datetime
-from urllib.parse import urljoin
+
+from scraper.utils import parse_date, extract_attachments  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
 ATTACHMENT_EXT_RE = re.compile(r'\.(pdf|doc|docx|xls|xlsx|zip|rar|7z|txt)(\?|$)', re.IGNORECASE)
-
-
-def parse_date(text):
-    """从字符串解析日期，支持多种格式。"""
-    text = str(text or '').strip()
-    for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%Y年%m月%d日'):
-        try:
-            return datetime.strptime(text, fmt).date()
-        except ValueError:
-            continue
-    # 佛山市日期格式为 MM-DD（无年份），自动补当前年份
-    try:
-        return datetime.strptime(f'{datetime.now().year}-{text}', '%Y-%m-%d').date()
-    except ValueError:
-        return None
 
 
 def extract_government_phone(text):
@@ -95,13 +84,5 @@ def parse_source_files(value, context):
     return decoded
 
 
-def extract_attachments(soup, base_url):
-    """从 HTML 中提取附件链接（匹配常见文档扩展名）。"""
-    attachments = []
-    for a in soup.find_all('a', href=True):
-        href = a['href']
-        if ATTACHMENT_EXT_RE.search(href):
-            url = urljoin(base_url, href)
-            name = a.get_text(strip=True) or url.rsplit('/', 1)[-1]
-            attachments.append({'url': url, 'name': name})
-    return attachments
+# extract_attachments 已上提到 scraper/utils.py，此处通过模块顶部 import 重新导出。
+# 如需 eia 特有的附件提取逻辑（例如不同的扩展名匹配），在此处添加包装函数。
