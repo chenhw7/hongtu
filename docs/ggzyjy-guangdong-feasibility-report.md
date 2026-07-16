@@ -170,3 +170,164 @@ GGZYJY_KEYWORDS = [
 ---
 
 > **决策建议**：投入 1-2 天做实地验证，确认可行后 3-4 天完成开发部署。总投入约 1 周，预期 ROI 高。
+
+---
+
+## 八、实地验证结果（2026-07-16）
+
+> 验证方式：通过 WebFetch 和浏览器直接访问 API 端点，验证可用性
+> 结论：**可行，反爬极低，httpx 直连完全可行**
+
+### 8.1 实际发现的 API 端点
+
+#### 搜索/列表接口（核心接口）
+
+```
+POST https://ygp.gdzwfw.gov.cn/ggzy-portal/search/v2/items
+Content-Type: application/json
+```
+
+请求参数（JSON Body）：
+```json
+{
+  "pageNo": 1,
+  "pageSize": 20,
+  "keyword": "管道",
+  "tradingTypeCode": "jsgc",
+  "siteCode": "44",
+  "startTime": "20260701000000",
+  "endTime": "20260716235959"
+}
+```
+
+- `tradingTypeCode`: "jsgc"=工程建设
+- `noticeSecondType`: "A"=工程建设, "B"=土地矿业, "C"=国有资产, "D"=政府采购
+- `siteCode`: "44"=广东省, "440100"=广州市, "440700"=江门市等
+- `startTime`/`endTime`: 格式 "yyyyMMddHHmmss"
+- `keyword`: 关键词搜索
+
+响应格式：
+```json
+{
+  "errcode": 0,
+  "errmsg": "ok",
+  "data": {
+    "pageNo": 1,
+    "pageSize": 20,
+    "pageTotal": 2632,
+    "total": "5264",
+    "pageData": [
+      {
+        "noticeId": "f970e58a-...",
+        "noticeTitle": "...燃气管道拆除迁改工程施工总承包...",
+        "noticeSecondType": "A",
+        "noticeSecondTypeDesc": "工程建设",
+        "noticeThirdType": "4",
+        "noticeThirdTypeDesc": "中标结果",
+        "projectTypeName": "市政",
+        "regionName": "广州市",
+        "projectOwner": "广州市政园建设管理有限公司",
+        "projectCode": "E4401002701503104001",
+        "publishDate": "20260716190934"
+      }
+    ]
+  }
+}
+```
+
+#### 详情接口（核心接口）
+
+```
+GET https://ygp.gdzwfw.gov.cn/ggzy-portal/center/apis/trading-notice/new/detail
+```
+
+参数：nodeId, version("v3"), tradingType("A"), noticeId, bizCode, projectCode, siteCode
+
+响应中 `tradingNoticeColumnModelList` 包含：
+- keyTable：结构化键值对（项目名称、标段名称、公告性质等）
+- richText：HTML 内容（含招标人、联系人、电话、预算、截止日期等完整信息）
+- 附件列表：`noticeFileBOList`（含文件名和 rowGuid）
+
+#### 辅助接口
+
+| 接口 | 用途 |
+|------|------|
+| `GET /ggzy-portal/base/site?siteCode=` | 地区列表（21 市编码） |
+| `GET /ggzy-portal/base/columns/tree?siteCode=44` | 栏目树 |
+| `GET /ggzy-portal/center/apis/trading-notice/new/nodeList` | 项目节点列表 |
+
+### 8.2 反爬实际情况
+
+| 防护维度 | 实际情况 |
+|---------|---------|
+| WAF | 无。API 直接返回 JSON |
+| 验证码 | 无。连续请求未触发 |
+| Cookie/Token | 不需要 |
+| 登录要求 | 不需要 |
+| 响应加密 | 无。明文 JSON |
+| 频率限制 | 未检测到明显限制 |
+
+**结论：反爬强度极低，与 ctbpsp（5层反爬）形成鲜明对比。**
+
+### 8.3 字段匹配度
+
+| Lead 模型字段 | 来源 | 可获取 |
+|--------------|------|--------|
+| project_name | 列表 `noticeTitle` + 详情 `TENDER_PROJECT_NAME` | ✅ |
+| bidding_number | 列表 `projectCode` | ✅ |
+| announcement_type | 列表 `noticeThirdTypeDesc` / `datasetName` | ✅ |
+| buyer_name | 详情 richText "招标人" | ✅ |
+| buyer_address | 详情 richText "联系地址" | ✅ |
+| contact_person | 详情 richText "招标人联系人" | ✅ |
+| phone | 详情 richText "联系电话" | ✅ |
+| agency_name | 详情 richText "招标代理机构" | ✅ |
+| agency_phone | 详情 richText 代理"联系电话" | ✅ |
+| budget_amount | 详情 richText "最高投标限价" | ✅ |
+| publish_date | 列表 + 详情 `publishDate` | ✅ |
+| deadline | 详情 richText "投标文件递交截止时间" | ✅ |
+| region | 列表 `regionName` | ✅ |
+| attachments | 详情 `noticeFileBOList` | ✅（下载 URL 待确认） |
+
+### 8.4 地区编码映射表
+
+| 城市 | siteCode | 城市 | siteCode |
+|------|----------|------|----------|
+| 省级 | 440000 | 东莞市 | 441900 |
+| 广州市 | 440100 | 中山市 | 442000 |
+| 深圳市 | 440300 | 江门市 | 440700 |
+| 珠海市 | 440400 | 佛山市 | 440600 |
+| 汕头市 | 440500 | 惠州市 | 441300 |
+| 韶关市 | 440200 | 湛江市 | 440800 |
+| 河源市 | 441600 | 茂名市 | 440900 |
+| 梅州市 | 441400 | 肇庆市 | 441200 |
+| 汕尾市 | 441500 | 清远市 | 441800 |
+| 阳江市 | 441700 | 潮州市 | 445100 |
+| 揭阳市 | 445200 | 云浮市 | 445300 |
+
+### 8.5 最终可行性结论
+
+**可行。** 推荐方案：HTTP API 直接调用（httpx），无需浏览器自动化。
+
+- 反爬：极低（0层防护）
+- 字段匹配度：极高（Lead 模型全部核心字段可获取）
+- 数据规模："管道"关键词工程建设类共 5264 条
+- 预计工作量：2.5 天
+
+### 8.6 风险与待验证项
+
+1. 附件下载 URL 格式需进一步确认（有 rowGuid 但完整 URL 未验证）
+2. `noticeThirdType` API 端过滤不严格，需客户端二次过滤
+3. richText HTML 格式在不同地市的公告中可能有差异
+
+### 8.7 与初步推测对比
+
+| 初步推测 | 实际验证 | 符合度 |
+|---------|---------|--------|
+| Vue.js SPA + REST API | 确认 | ✅ |
+| API 端点 `/ggzy-portal/api/jsgc/list` | 实际为 `/ggzy-portal/search/v2/items` | ⚠️ 路径不同但功能等价 |
+| 分页 pageNo/pageSize | 确认 | ✅ |
+| 关键词搜索 | 确认 | ✅ |
+| 时间范围筛选 | 确认 | ✅ |
+| 反爬预期宽松 | 实际比预期更低 | ✅ 超出预期 |
+| 联系人/电话在详情页 | 确认在 richText HTML 中 | ✅ |
+| 预算金额可获取 | 确认为"最高投标限价" | ✅ |

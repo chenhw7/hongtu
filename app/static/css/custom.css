@@ -234,6 +234,9 @@ a:hover { text-decoration: underline; }
 .badge-amber  { background: var(--amber-soft); color: var(--amber); }
 .badge-red    { background: var(--red-soft); color: var(--red); }
 .badge-accent { background: var(--accent-soft); color: var(--accent); }
+.badge-teal   { background: #ccfbf1; color: #0f766e; }
+.badge-indigo { background: #eef2ff; color: #4338ca; }
+.badge-purple { background: #f3e8ff; color: #7c3aed; }
 /* Legacy Bootstrap badge aliases for status_badge macro */
 .badge-primary { background: var(--accent-soft); color: var(--accent); }
 .badge-success { background: var(--green-soft); color: var(--green); }

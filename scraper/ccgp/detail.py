@@ -25,6 +25,73 @@ def extract_section(text, header_pattern):
     return rest[:end]
 
 
+# 中标/成交公告类型关键词（用于判断是否需要提取中标方信息）
+_WINNER_ANNOUNCEMENT_KEYWORDS = ('中标公告', '成交公告', '中标结果', '成交结果')
+
+# 中标供应商名称提取正则
+_WINNER_NAME_PATTERNS = [
+    re.compile(r'(?:中标供应商|成交供应商|中标单位|成交单位|中标人|成交人|供应商名称)\s*[：:]\s*(.+?)(?:\n|$)'),
+    re.compile(r'(?:中标供应商|成交供应商|中标单位|成交单位|中标人|成交人|供应商名称)\s*名称\s*[：:]\s*(.+?)(?:\n|$)'),
+]
+
+# 中标金额提取正则
+_WINNER_AMOUNT_PATTERNS = [
+    re.compile(r'(?:中标金额|成交金额|中标（成交）金额|中标\(成交\)金额|中标价|成交价|合同金额)\s*[：:]\s*([\d,.]+)\s*(万元|元)'),
+    re.compile(r'(?:中标金额|成交金额|中标（成交）金额|中标\(成交\)金额|中标价|成交价|合同金额)\s*[：:]\s*([\d,.]+)'),
+]
+
+
+def extract_winner_info(full_text):
+    """从详情页全文中提取中标方信息。
+
+    仅适用于中标/成交类公告，其他类型公告调用后返回空 dict。
+
+    Args:
+        full_text: 详情页全文文本（已用 get_text 提取）
+
+    Returns:
+        dict: {'winner_name': str, 'winning_amount': float or None}
+              提取失败时返回空 dict {}
+    """
+    # 先判断是否为中标/成交类公告
+    is_winner_type = any(kw in full_text for kw in _WINNER_ANNOUNCEMENT_KEYWORDS)
+    if not is_winner_type:
+        return {}
+
+    result = {}
+
+    # 提取中标供应商名称
+    for pattern in _WINNER_NAME_PATTERNS:
+        match = pattern.search(full_text)
+        if match:
+            name = match.group(1).strip()
+            # 清理可能的尾部杂质（如地址、电话等同行内容）
+            for sep in ('地址', '电话', '联系', '金额'):
+                idx = name.find(sep)
+                if idx > 0:
+                    name = name[:idx].strip()
+            if name:
+                result['winner_name'] = name[:200]
+                break
+
+    # 提取中标金额
+    for pattern in _WINNER_AMOUNT_PATTERNS:
+        match = pattern.search(full_text)
+        if match:
+            amount_str = match.group(1).replace(',', '').strip()
+            try:
+                amount = float(amount_str)
+                # 如果有单位组且为万元，则转换
+                if match.lastindex >= 2 and match.group(2) == '万元':
+                    amount = amount * 10000
+                result['winning_amount'] = amount
+            except ValueError:
+                pass
+            break
+
+    return result
+
+
 def extract_field(section_text, label_pattern):
     """在分段文本中按 '标签：值' 的形式提取字段值（取到该行换行为止）。
 
@@ -203,5 +270,10 @@ def parse_detail(soup):
             if match:
                 detail['buyer_name'] = match.group(1).strip()[:200]
                 break
+
+    # ---- 4) 中标/成交公告：提取中标方信息 ----
+    winner_info = extract_winner_info(full_text)
+    if winner_info:
+        detail.update(winner_info)
 
     return detail

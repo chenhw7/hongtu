@@ -512,6 +512,7 @@ class GdgpoScraper(BaseScraper):
             winner_match = _GPFA_RESULT_WINNER_RE.search(full_text)
             if winner_match:
                 extra['winning_supplier'] = winner_match.group(1).strip()[:200]
+                extra['winner_name'] = extra['winning_supplier']  # 标准化字段名
                 extra['winning_supplier_address'] = winner_match.group(2).strip()[:300]
                 try:
                     extra['winning_amount'] = float(winner_match.group(3).replace(',', ''))

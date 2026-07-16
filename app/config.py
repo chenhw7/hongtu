@@ -26,7 +26,11 @@ class Config:
     SCRAPER_SOURCE_SITES = {
         'ccgp': 'http://www.ccgp.gov.cn/',
         'gdgpo': 'https://gdgpo.czt.gd.gov.cn/',
+        'eia': '',  # 环评公示无统一官网，各城市独立
         'poi': 'https://lbs.amap.com/',
+        'ggzyjy': 'https://ygp.gdzwfw.gov.cn/',
+        'fdtz': 'https://tzxm.gd.gov.cn/',
+        'pipebiz': 'https://www.chinapipe.net/',
     }
     # 高德地图 Web服务API Key（个人开发者免费申请：https://lbs.amap.com/ -> 控制台 ->
     # 创建应用 -> 添加Key -> 服务平台选"Web服务"，不要选"Web端(JS API)"）。
@@ -34,7 +38,10 @@ class Config:
     AMAP_API_KEY = os.environ.get('AMAP_API_KEY', '')
     # 地图POI采集关键词（管道经销商/门店/工厂类目搜索词）
     POI_KEYWORDS = ['PVC管材', '给排水管件', '塑料管材经销', 'HDPE管材', 'PPR管材', '管材批发', '管件加工厂']
-    # 地图POI采集城市范围（默认广东省21个地级市，与现有gdgpo数据源范围保持一致）
+    # 地图POI采集城市范围
+    # POI_SCOPE: 'guangdong' 使用广东省21城（默认，向后兼容）；'national' 使用全国重点城市
+    POI_SCOPE = 'guangdong'
+    # POI_CITIES: 保留广东省列表作为默认值（POI_SCOPE='guangdong' 时生效，或用户显式自定义时优先）
     POI_CITIES = [
         '广州', '深圳', '珠海', '汕头', '佛山', '韶关', '河源', '梅州', '惠州',
         '汕尾', '东莞', '中山', '江门', '阳江', '湛江', '茂名', '肇庆', '清远',

@@ -15,36 +15,24 @@ def run_daily_scrape(app):
 
     在 Flask app context 中依次运行各数据源的爬虫。
     """
-    with app.app_context():
-        from scraper.ccgp import CcgpScraper
-        from scraper.gdgpo import GdgpoScraper
-        from scraper.eia import EiaScraper
+    from scraper.registry import SCRAPER_REGISTRY, get_scraper_class
 
+    with app.app_context():
         logger.info('===== 每日定时采集开始 =====')
 
-        # 运行中国政府采购网爬虫
-        try:
-            scraper_ccgp = CcgpScraper(app=app)
-            count_ccgp = scraper_ccgp.run()
-            logger.info('ccgp 采集完成，新增 %d 条', count_ccgp)
-        except Exception as e:
-            logger.exception('ccgp 定时采集失败: %s', e)
-
-        # 运行广东省政府采购网爬虫
-        try:
-            scraper_gdgpo = GdgpoScraper(app=app)
-            count_gdgpo = scraper_gdgpo.run(max_pages=3)
-            logger.info('gdgpo 采集完成，新增 %d 条', count_gdgpo)
-        except Exception as e:
-            logger.exception('gdgpo 定时采集失败: %s', e)
-
-        # 运行环评公示爬虫
-        try:
-            scraper_eia = EiaScraper(app=app)
-            count_eia = scraper_eia.run(max_pages=3)
-            logger.info('eia 采集完成，新增 %d 条', count_eia)
-        except Exception as e:
-            logger.exception('eia 定时采集失败: %s', e)
+        for source_type, entry in SCRAPER_REGISTRY.items():
+            if not entry.get('include_in_all'):
+                continue  # 跳过 POI 等非 Lead 数据源
+            try:
+                ScraperClass = get_scraper_class(source_type)
+                if ScraperClass is None:
+                    logger.warning('无法加载采集器: %s', source_type)
+                    continue
+                scraper_instance = ScraperClass(app=app)
+                count = scraper_instance.run()
+                logger.info('%s 采集完成，新增 %d 条', source_type, count)
+            except Exception as e:
+                logger.exception('%s 定时采集失败: %s', source_type, e)
 
         logger.info('===== 每日定时采集结束 =====')
 

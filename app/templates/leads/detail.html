@@ -59,10 +59,9 @@
                     {% else %}—{% endif %}
                 </td></tr>
                 <tr><td class="label">来源</td><td class="value">
-                    {% if lead.source_type == 'ccgp' %}<span class="badge badge-accent">ccgp（中国政府采购网）</span>
-                    {% elif lead.source_type == 'gdgpo' %}<span class="badge badge-green">gdgpo（广东政府采购网）</span>
-                    {% elif lead.source_type == 'eia' %}<span class="badge badge-amber">eia（环评公示）</span>
-                    {% else %}<span class="badge badge-slate">{{ lead.source_type or '未知' }}</span>{% endif %}
+                    {% set _badge_cls = registry[lead.source_type].badge_class if lead.source_type and lead.source_type in registry else 'badge-slate' %}
+                    {% set _badge_label = registry[lead.source_type].label if lead.source_type and lead.source_type in registry else (lead.source_type or '未知') %}
+                    <span class="badge {{ _badge_cls }}">{{ lead.source_type }}{% if lead.source_type in registry %}（{{ _badge_label }}）{% endif %}</span>
                 </td></tr>
                 <tr><td class="label">来源URL</td><td class="value">
                     {% if lead.source_url %}<a href="{{ lead.source_url }}" target="_blank">{{ lead.source_url }}</a>{% else %}—{% endif %}

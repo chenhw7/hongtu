@@ -84,3 +84,21 @@ PLATFORM_KEYWORDS_FINAL = dedup_substring_keywords(PLATFORM_KEYWORDS)
 
 # 兼容旧 SCRAPER_KEYWORDS 的模块级常量（各采集器默认关键词）
 DEFAULT_SCRAPER_KEYWORDS = PLATFORM_KEYWORDS_FINAL
+
+# 公共资源交易平台类采集器使用的关键词（全部类别，含项目类型词）
+# 工程建设类招标中管道作为材料出现，项目类型词（污水处理厂等）也是有效的搜索维度
+GGZYJY_KEYWORDS = list(PLATFORM_KEYWORDS)
+
+GGZYJY_KEYWORDS_FINAL = dedup_substring_keywords(GGZYJY_KEYWORDS)
+
+# 管道商务网采集器使用的关键词（管道产品 + 工程 + 材料，与 CCGP 一致）
+# 管道商务网是行业垂直平台，关键词侧重管道产品/工程/材料，不需要项目类型词
+PIPEBIZ_KEYWORDS = list(CCGP_KEYWORDS)
+
+PIPEBIZ_KEYWORDS_FINAL = dedup_substring_keywords(PIPEBIZ_KEYWORDS)
+
+# 发改委项目审批采集器使用的关键词（与 EIA 相同，侧重项目类型词）
+# 审批公示标题描述的是工程项目（如"XX污水处理厂建设项目备案公示"），
+# 产品词（PVC管等）在审批标题中极少出现，仅保留项目类型词和"管道"
+FDTZ_KEYWORDS = list(EIA_KEYWORDS)
+FDTZ_KEYWORDS_FINAL = dedup_substring_keywords(FDTZ_KEYWORDS)

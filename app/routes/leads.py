@@ -17,6 +17,7 @@ from openpyxl.utils import get_column_letter
 from app.extensions import db
 from app.models import Lead, Customer, Attachment
 from app.config import Config
+from scraper.registry import get_source_choices, SCRAPER_REGISTRY
 
 leads = Blueprint('leads', __name__, url_prefix='/leads')
 
@@ -26,7 +27,7 @@ ANNOUNCEMENT_TYPE_CHOICES = [
     '终止公告', '竞争性磋商', '竞争性谈判', '询价公告',
     '单一来源', '其他公告',
 ]
-SOURCE_TYPE_CHOICES = ['ccgp', 'gdgpo', 'eia', '手动录入']
+SOURCE_TYPE_CHOICES = [c[0] for c in get_source_choices()]
 
 
 def _resolve_instance_file(relative_path):
@@ -248,7 +249,9 @@ def index():
                            query_args=query_args,
                            today=date.today(),
                            sort=sort,
-                           order=order)
+                           order=order,
+                           source_type_choices=SOURCE_TYPE_CHOICES,
+                           registry=SCRAPER_REGISTRY)
 
 
 @leads.route('/<int:id>')
@@ -268,7 +271,8 @@ def detail(id):
     return render_template('leads/detail.html',
                            lead=lead,
                            raw_data_json=raw_data_json,
-                           today=date.today())
+                           today=date.today(),
+                           registry=SCRAPER_REGISTRY)
 
 
 @leads.route('/<int:id>/snapshot')

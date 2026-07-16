@@ -59,6 +59,10 @@ class FollowUp(db.Model):
 
 class Lead(db.Model):
     __tablename__ = 'leads'
+    __table_args__ = (
+        db.Index('ix_lead_source_publish', 'source_type', 'publish_date'),
+        db.Index('ix_lead_project_buyer', 'project_name', 'buyer_name'),
+    )
     id = db.Column(db.Integer, primary_key=True)
     bidding_number = db.Column(db.String(100), unique=True, comment='招标编号（唯一）')
     project_name = db.Column(db.String(500), comment='项目名称')
@@ -75,7 +79,7 @@ class Lead(db.Model):
     publish_time = db.Column(db.String(10), comment='发布时间（HH:MM，精确到分钟）')
     deadline = db.Column(db.Date, comment='截止日期')
     source_url = db.Column(db.String(500), comment='来源URL')
-    source_type = db.Column(db.String(50), comment='来源类型：ccgp/gdgpo/eia')
+    source_type = db.Column(db.String(50), comment='来源类型：ccgp/gdgpo/eia/ggzyjy')
     raw_data = db.Column(db.Text, comment='原始数据JSON')
     html_snapshot_path = db.Column(db.String(500), comment='详情页HTML快照的本地相对路径')
     is_converted = db.Column(db.Boolean, default=False, comment='是否已转为客户')
@@ -110,7 +114,7 @@ class Attachment(db.Model):
 class ScrapeTask(db.Model):
     __tablename__ = 'scrape_tasks'
     id = db.Column(db.Integer, primary_key=True)
-    task_type = db.Column(db.String(50), comment='数据源类型：ccgp/gdgpo')
+    task_type = db.Column(db.String(50), comment='数据源类型：ccgp/gdgpo/eia/ggzyjy/poi')
     status = db.Column(db.String(20), default='待运行', comment='状态：待运行/运行中/完成/失败')
     target_url = db.Column(db.String(500), comment='目标URL')
     result_count = db.Column(db.Integer, default=0, comment='采集数量')

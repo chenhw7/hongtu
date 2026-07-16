@@ -19,27 +19,17 @@ def _run_scraper_task(app, task_type, keywords, max_pages):
 
     Args:
         app: Flask 应用实例
-        task_type: 'ccgp' 或 'gdgpo'
+        task_type: 数据源标识（如 'ccgp', 'gdgpo', 'eia', 'poi'）
         keywords: 关键词列表
         max_pages: 最大页数
     """
     with app.app_context():
         try:
-            if task_type == 'ccgp':
-                from scraper.ccgp import CcgpScraper
-                scraper_instance = CcgpScraper(app=app)
-            elif task_type == 'gdgpo':
-                from scraper.gdgpo import GdgpoScraper
-                scraper_instance = GdgpoScraper(app=app)
-            elif task_type == 'poi':
-                from scraper.poi import AmapPoiScraper
-                scraper_instance = AmapPoiScraper(app=app)
-            elif task_type == 'eia':
-                from scraper.eia import EiaScraper
-                scraper_instance = EiaScraper(app=app)
-            else:
+            from scraper.registry import get_scraper_class
+            ScraperClass = get_scraper_class(task_type)
+            if ScraperClass is None:
                 return
-
+            scraper_instance = ScraperClass(app=app)
             scraper_instance.run(keywords=keywords, max_pages=max_pages)
         except Exception as e:
             current_app.logger.exception('爬虫后台任务异常 [%s]: %s', task_type, e)
@@ -51,6 +41,8 @@ def _run_scraper_task(app, task_type, keywords, max_pages):
 @scraper.route('/')
 def index():
     """爬虫控制面板页面"""
+    from scraper.registry import SCRAPER_REGISTRY, get_all_source_types
+
     # 统计信息
     total_leads = Lead.query.count()
     today = date.today()
@@ -60,30 +52,23 @@ def index():
     ).count()
     converted_leads = Lead.query.filter_by(is_converted=True).count()
 
-    # 各来源数量
-    ccgp_count = Lead.query.filter_by(source_type='ccgp').count()
-    gdgpo_count = Lead.query.filter_by(source_type='gdgpo').count()
+    # 各来源统计 — 循环 registry 自动生成
+    source_stats = {}
+    for source_type in get_all_source_types(lead_only=True):
+        source_stats[f'{source_type}_count'] = Lead.query.filter_by(source_type=source_type).count()
+        source_stats[f'last_{source_type}'] = ScrapeTask.query.filter_by(
+            task_type=source_type
+        ).order_by(ScrapeTask.created_at.desc()).first()
+
+    # POI 统计特殊处理（产出 Customer 而非 Lead）
     poi_count = Customer.query.filter_by(source='地图POI采集').count()
-    eia_count = Lead.query.filter_by(source_type='eia').count()
+    last_poi = ScrapeTask.query.filter_by(task_type='poi').order_by(
+        ScrapeTask.created_at.desc()).first()
 
     # 最近10条采集任务
     recent_tasks = ScrapeTask.query.order_by(
         ScrapeTask.created_at.desc()
     ).limit(10).all()
-
-    # 各数据源最后采集任务
-    last_ccgp = ScrapeTask.query.filter_by(task_type='ccgp').order_by(
-        ScrapeTask.created_at.desc()
-    ).first()
-    last_gdgpo = ScrapeTask.query.filter_by(task_type='gdgpo').order_by(
-        ScrapeTask.created_at.desc()
-    ).first()
-    last_poi = ScrapeTask.query.filter_by(task_type='poi').order_by(
-        ScrapeTask.created_at.desc()
-    ).first()
-    last_eia = ScrapeTask.query.filter_by(task_type='eia').order_by(
-        ScrapeTask.created_at.desc()
-    ).first()
 
     # 配置的关键词
     keywords = current_app.config.get('SCRAPER_KEYWORDS', [])
@@ -96,6 +81,20 @@ def index():
     from scraper.keywords import CCGP_KEYWORDS_FINAL
     ccgp_keywords_count = len(CCGP_KEYWORDS_FINAL)
 
+    # 向后兼容：保持旧变量名供模板使用（Task #2 会改为循环渲染）
+    ccgp_count = source_stats.get('ccgp_count', 0)
+    gdgpo_count = source_stats.get('gdgpo_count', 0)
+    eia_count = source_stats.get('eia_count', 0)
+    ggzyjy_count = source_stats.get('ggzyjy_count', 0)
+    fdtz_count = source_stats.get('fdtz_count', 0)
+    last_ccgp = source_stats.get('last_ccgp')
+    last_gdgpo = source_stats.get('last_gdgpo')
+    last_eia = source_stats.get('last_eia')
+    last_ggzyjy = source_stats.get('last_ggzyjy')
+    pipebiz_count = source_stats.get('pipebiz_count', 0)
+    last_pipebiz = source_stats.get('last_pipebiz')
+    last_fdtz = source_stats.get('last_fdtz')
+
     return render_template(
         'scraper/panel.html',
         total_leads=total_leads,
@@ -103,19 +102,27 @@ def index():
         converted_leads=converted_leads,
         ccgp_count=ccgp_count,
         gdgpo_count=gdgpo_count,
-        poi_count=poi_count,
         eia_count=eia_count,
-        recent_tasks=recent_tasks,
+        ggzyjy_count=ggzyjy_count,
+        pipebiz_count=pipebiz_count,
+        fdtz_count=fdtz_count,
+        poi_count=poi_count,
         last_ccgp=last_ccgp,
         last_gdgpo=last_gdgpo,
-        last_poi=last_poi,
         last_eia=last_eia,
+        last_ggzyjy=last_ggzyjy,
+        last_pipebiz=last_pipebiz,
+        last_fdtz=last_fdtz,
+        last_poi=last_poi,
+        recent_tasks=recent_tasks,
         keywords=keywords,
         ccgp_keywords_count=ccgp_keywords_count,
         source_sites=source_sites,
         eia_regions=EIA_REGIONS,
         eia_all_keywords=eia_all_keywords,
         running_tasks=dict(_running_tasks),
+        source_stats=source_stats,
+        registry=SCRAPER_REGISTRY,
     )
 
 
@@ -151,10 +158,12 @@ def run():
 
     # 确定要运行的数据源（POI 产出的是 Customer 潜在客户而非 Lead 招投标线索，
     # 与 ccgp/gdgpo/eia 性质不同，'all' 不自动包含 poi，需单独触发）
+    from scraper.registry import get_all_source_types
+
     task_types = []
     if task_type == 'all':
-        task_types = ['ccgp', 'gdgpo', 'eia']
-    elif task_type in ('ccgp', 'gdgpo', 'poi', 'eia'):
+        task_types = get_all_source_types(include_in_all=True)
+    elif task_type in get_all_source_types():
         task_types = [task_type]
     else:
         return jsonify({'success': False, 'message': f'无效的数据源: {task_type}'}), 400
@@ -190,9 +199,10 @@ def run():
 
 def _resolve_control_task_types(task_type):
     """将 task_type ('ccgp'/'gdgpo'/'all') 解析为当前正在运行的数据源列表。"""
+    from scraper.registry import get_all_source_types
     if task_type == 'all':
-        candidates = ['ccgp', 'gdgpo', 'eia']
-    elif task_type in ('ccgp', 'gdgpo', 'poi', 'eia'):
+        candidates = get_all_source_types(include_in_all=True)
+    elif task_type in get_all_source_types():
         candidates = [task_type]
     else:
         return None

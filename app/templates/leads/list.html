@@ -38,9 +38,11 @@
                 <span class="filter-label">来源类型</span>
                 <select name="source_type" class="filter-select">
                     <option value="">全部</option>
-                    <option value="ccgp" {{ 'selected' if source_type == 'ccgp' }}>ccgp（中国政府采购网）</option>
-                    <option value="gdgpo" {{ 'selected' if source_type == 'gdgpo' }}>gdgpo（广东政府采购网）</option>
-                    <option value="eia" {{ 'selected' if source_type == 'eia' }}>eia（环评公示）</option>
+                    {% for key, entry in registry.items() %}
+                    {% if entry.is_lead_source %}
+                    <option value="{{ key }}" {{ 'selected' if source_type == key }}>{{ key }}（{{ entry.label }}）</option>
+                    {% endif %}
+                    {% endfor %}
                 </select>
             </div>
             <div>
@@ -183,15 +185,9 @@
                             </td>
                             <td class="cell-muted">{{ lead.created_at.strftime('%Y-%m-%d %H:%M') if lead.created_at else '—' }}</td>
                             <td>
-                                {% if lead.source_type == 'ccgp' %}
-                                <span class="badge badge-accent">ccgp</span>
-                                {% elif lead.source_type == 'gdgpo' %}
-                                <span class="badge badge-green">gdgpo</span>
-                                {% elif lead.source_type == 'eia' %}
-                                <span class="badge badge-amber">eia</span>
-                                {% else %}
-                                <span class="badge badge-slate">{{ lead.source_type or '未知' }}</span>
-                                {% endif %}
+                                {% set _badge_cls = registry[lead.source_type].badge_class if lead.source_type and lead.source_type in registry else 'badge-slate' %}
+                                {% set _badge_label = lead.source_type or '未知' %}
+                                <span class="badge {{ _badge_cls }}">{{ _badge_label }}</span>
                             </td>
                             <td>
                                 {% if lead.is_converted %}
