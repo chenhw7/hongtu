@@ -81,38 +81,12 @@ def index():
     from scraper.keywords import CCGP_KEYWORDS_FINAL
     ccgp_keywords_count = len(CCGP_KEYWORDS_FINAL)
 
-    # 向后兼容：保持旧变量名供模板使用（Task #2 会改为循环渲染）
-    ccgp_count = source_stats.get('ccgp_count', 0)
-    gdgpo_count = source_stats.get('gdgpo_count', 0)
-    eia_count = source_stats.get('eia_count', 0)
-    ggzyjy_count = source_stats.get('ggzyjy_count', 0)
-    fdtz_count = source_stats.get('fdtz_count', 0)
-    last_ccgp = source_stats.get('last_ccgp')
-    last_gdgpo = source_stats.get('last_gdgpo')
-    last_eia = source_stats.get('last_eia')
-    last_ggzyjy = source_stats.get('last_ggzyjy')
-    pipebiz_count = source_stats.get('pipebiz_count', 0)
-    last_pipebiz = source_stats.get('last_pipebiz')
-    last_fdtz = source_stats.get('last_fdtz')
-
     return render_template(
         'scraper/panel.html',
         total_leads=total_leads,
         today_leads=today_leads,
         converted_leads=converted_leads,
-        ccgp_count=ccgp_count,
-        gdgpo_count=gdgpo_count,
-        eia_count=eia_count,
-        ggzyjy_count=ggzyjy_count,
-        pipebiz_count=pipebiz_count,
-        fdtz_count=fdtz_count,
         poi_count=poi_count,
-        last_ccgp=last_ccgp,
-        last_gdgpo=last_gdgpo,
-        last_eia=last_eia,
-        last_ggzyjy=last_ggzyjy,
-        last_pipebiz=last_pipebiz,
-        last_fdtz=last_fdtz,
         last_poi=last_poi,
         recent_tasks=recent_tasks,
         keywords=keywords,

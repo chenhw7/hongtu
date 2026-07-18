@@ -102,3 +102,18 @@ PIPEBIZ_KEYWORDS_FINAL = dedup_substring_keywords(PIPEBIZ_KEYWORDS)
 # 产品词（PVC管等）在审批标题中极少出现，仅保留项目类型词和"管道"
 FDTZ_KEYWORDS = list(EIA_KEYWORDS)
 FDTZ_KEYWORDS_FINAL = dedup_substring_keywords(FDTZ_KEYWORDS)
+
+# 北极星环保网采集器使用的关键词（环保行业招投标/项目信息）
+# 北极星环保频道涵盖：水处理、大气治理、固废、环境监测等细分领域
+BJX_KEYWORDS = [
+    '污水处理', '污水处理工程', '污水处理厂',
+    '烟气脱硫', '烟气脱硝', '大气治理', '除尘设备',
+    '固废处理', '垃圾焚烧', '危废处理', '污泥处理',
+    '环保工程', '环保设备', '环保项目',
+    '环境监测', '水质监测', '废气治理',
+    '供水工程', '排水工程', '管网工程', '雨污分流',
+    '河道治理', '水环境综合治理', '黑臭水体',
+    '餐厨垃圾', '建筑垃圾', '生活垃圾',
+]
+
+BJX_KEYWORDS_FINAL = dedup_substring_keywords(BJX_KEYWORDS)

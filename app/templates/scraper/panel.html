@@ -46,195 +46,14 @@
 
 <!-- 数据源卡片 -->
 <div class="scraper-grid">
+    {% for source_type, entry in registry.items() %}
+    {% set src_count = poi_count if source_type == 'poi' else source_stats.get(source_type + '_count', 0) %}
+    {% set src_last = last_poi if source_type == 'poi' else source_stats.get('last_' + source_type) %}
+    {% set src_site = source_sites.get(source_type, '') %}
     <div class="scraper-card">
         <div class="scraper-card-header">
-            <h3>中国政府采购网 (ccgp)
-                {% if source_sites.ccgp %}
-                <a href="{{ source_sites.ccgp }}" target="_blank" rel="noopener" class="site-link" title="打开中国政府采购网官网">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                    官网
-                </a>
-                {% endif %}
-            </h3>
-            <span class="badge badge-slate">共 {{ ccgp_count }} 条</span>
-        </div>
-        <div class="scraper-card-meta">
-            {% if last_ccgp %}
-            <div class="meta-row"><span class="meta-label">上次采集</span><span class="meta-value">{{ last_ccgp.finished_at.strftime('%Y-%m-%d %H:%M') if last_ccgp.finished_at else '进行中...' }}</span></div>
-            <div class="meta-row"><span class="meta-label">状态</span><span class="meta-value">
-                {% if last_ccgp.status == '完成' %}<span class="badge badge-green">完成</span>
-                {% elif last_ccgp.status == '失败' %}<span class="badge badge-red">失败</span>
-                {% elif last_ccgp.status == '运行中' %}<span class="badge badge-amber"><span class="spinner spinner-sm"></span> 运行中</span>
-                {% endif %}
-            </span></div>
-            <div class="meta-row"><span class="meta-label">新增</span><span class="meta-value" style="color:var(--green)">{{ last_ccgp.result_count }} 条</span></div>
-            {% else %}
-            <div class="meta-row"><span class="meta-label">状态</span><span class="meta-value text-muted">尚未执行采集</span></div>
-            {% endif %}
-        </div>
-        <button class="btn btn-primary btn-sm w-100 mt-2" id="btn-ccgp" onclick="runScraper('ccgp')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            立即采集
-        </button>
-    </div>
-    <div class="scraper-card">
-        <div class="scraper-card-header">
-            <h3>广东省政府采购网 (gdgpo)
-                {% if source_sites.gdgpo %}
-                <a href="{{ source_sites.gdgpo }}" target="_blank" rel="noopener" class="site-link" title="打开广东省政府采购网官网">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                    官网
-                </a>
-                {% endif %}
-            </h3>
-            <span class="badge badge-slate">共 {{ gdgpo_count }} 条</span>
-        </div>
-        <div class="scraper-card-meta">
-            {% if last_gdgpo %}
-            <div class="meta-row"><span class="meta-label">上次采集</span><span class="meta-value">{{ last_gdgpo.finished_at.strftime('%Y-%m-%d %H:%M') if last_gdgpo.finished_at else '进行中...' }}</span></div>
-            <div class="meta-row"><span class="meta-label">状态</span><span class="meta-value">
-                {% if last_gdgpo.status == '完成' %}<span class="badge badge-green">完成</span>
-                {% elif last_gdgpo.status == '失败' %}<span class="badge badge-red">失败</span>
-                {% elif last_gdgpo.status == '运行中' %}<span class="badge badge-amber"><span class="spinner spinner-sm"></span> 运行中</span>
-                {% endif %}
-            </span></div>
-            <div class="meta-row"><span class="meta-label">新增</span><span class="meta-value" style="color:var(--green)">{{ last_gdgpo.result_count }} 条</span></div>
-            {% else %}
-            <div class="meta-row"><span class="meta-label">状态</span><span class="meta-value text-muted">尚未执行采集</span></div>
-            {% endif %}
-        </div>
-        <button class="btn btn-primary btn-sm w-100 mt-2" id="btn-gdgpo" onclick="runScraper('gdgpo')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            立即采集
-        </button>
-    </div>
-    <div class="scraper-card">
-        <div class="scraper-card-header">
-            <h3>公共资源交易 (ggzyjy)
-                {% if source_sites.ggzyjy %}
-                <a href="{{ source_sites.ggzyjy }}" target="_blank" rel="noopener" class="site-link" title="打开粤公平官网">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                    官网
-                </a>
-                {% endif %}
-            </h3>
-            <span class="badge badge-slate">共 {{ ggzyjy_count }} 条</span>
-        </div>
-        <div class="scraper-card-meta">
-            {% if last_ggzyjy %}
-            <div class="meta-row"><span class="meta-label">上次采集</span><span class="meta-value">{{ last_ggzyjy.finished_at.strftime('%Y-%m-%d %H:%M') if last_ggzyjy.finished_at else '进行中...' }}</span></div>
-            <div class="meta-row"><span class="meta-label">状态</span><span class="meta-value">
-                {% if last_ggzyjy.status == '完成' %}<span class="badge badge-green">完成</span>
-                {% elif last_ggzyjy.status == '失败' %}<span class="badge badge-red">失败</span>
-                {% elif last_ggzyjy.status == '运行中' %}<span class="badge badge-amber"><span class="spinner spinner-sm"></span> 运行中</span>
-                {% endif %}
-            </span></div>
-            <div class="meta-row"><span class="meta-label">新增</span><span class="meta-value" style="color:var(--green)">{{ last_ggzyjy.result_count }} 条</span></div>
-            {% else %}
-            <div class="meta-row"><span class="meta-label">状态</span><span class="meta-value text-muted">尚未执行采集</span></div>
-            {% endif %}
-        </div>
-        <button class="btn btn-primary btn-sm w-100 mt-2" id="btn-ggzyjy" onclick="runScraper('ggzyjy')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            立即采集
-        </button>
-    </div>
-    <div class="scraper-card">
-        <div class="scraper-card-header">
-            <h3>管道商务网 (pipebiz)
-                {% if source_sites.pipebiz %}
-                <a href="{{ source_sites.pipebiz }}" target="_blank" rel="noopener" class="site-link" title="打开中国管道商务网官网">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                    官网
-                </a>
-                {% endif %}
-            </h3>
-            <span class="badge badge-slate">共 {{ pipebiz_count }} 条</span>
-        </div>
-        <div class="scraper-card-meta">
-            {% if last_pipebiz %}
-            <div class="meta-row"><span class="meta-label">上次采集</span><span class="meta-value">{{ last_pipebiz.finished_at.strftime('%Y-%m-%d %H:%M') if last_pipebiz.finished_at else '进行中...' }}</span></div>
-            <div class="meta-row"><span class="meta-label">状态</span><span class="meta-value">
-                {% if last_pipebiz.status == '完成' %}<span class="badge badge-green">完成</span>
-                {% elif last_pipebiz.status == '失败' %}<span class="badge badge-red">失败</span>
-                {% elif last_pipebiz.status == '运行中' %}<span class="badge badge-amber"><span class="spinner spinner-sm"></span> 运行中</span>
-                {% endif %}
-            </span></div>
-            <div class="meta-row"><span class="meta-label">新增</span><span class="meta-value" style="color:var(--green)">{{ last_pipebiz.result_count }} 条</span></div>
-            {% else %}
-            <div class="meta-row"><span class="meta-label">状态</span><span class="meta-value text-muted">尚未执行采集</span></div>
-            {% endif %}
-        </div>
-        <button class="btn btn-primary btn-sm w-100 mt-2" id="btn-pipebiz" onclick="runScraper('pipebiz')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            立即采集（Playwright渲染）
-        </button>
-    </div>
-    <div class="scraper-card">
-        <div class="scraper-card-header">
-            <h3>地图POI采集（潜在客户）
-                {% if source_sites.poi %}
-                <a href="{{ source_sites.poi }}" target="_blank" rel="noopener" class="site-link" title="打开高德开放平台（申请Web服务API Key）">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                    官网
-                </a>
-                {% endif %}
-            </h3>
-            <span class="badge badge-slate">共 {{ poi_count }} 条</span>
-        </div>
-        <div class="scraper-card-meta">
-            {% if last_poi %}
-            <div class="meta-row"><span class="meta-label">上次采集</span><span class="meta-value">{{ last_poi.finished_at.strftime('%Y-%m-%d %H:%M') if last_poi.finished_at else '进行中...' }}</span></div>
-            <div class="meta-row"><span class="meta-label">状态</span><span class="meta-value">
-                {% if last_poi.status == '完成' %}<span class="badge badge-green">完成</span>
-                {% elif last_poi.status == '失败' %}<span class="badge badge-red">失败</span>
-                {% elif last_poi.status == '运行中' %}<span class="badge badge-amber"><span class="spinner spinner-sm"></span> 运行中</span>
-                {% endif %}
-            </span></div>
-            <div class="meta-row"><span class="meta-label">新增</span><span class="meta-value" style="color:var(--green)">{{ last_poi.result_count }} 条</span></div>
-            {% else %}
-            <div class="meta-row"><span class="meta-label">状态</span><span class="meta-value text-muted">尚未执行采集</span></div>
-            {% endif %}
-        </div>
-        <button class="btn btn-primary btn-sm w-100 mt-2" id="btn-poi" onclick="runScraper('poi')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            立即采集（默认关键词×广东全省地级市）
-        </button>
-    </div>
-    <div class="scraper-card">
-        <div class="scraper-card-header">
-            <h3>发改委项目审批 (fdtz)
-                {% if source_sites.fdtz %}
-                <a href="{{ source_sites.fdtz }}" target="_blank" rel="noopener" class="site-link" title="打开广东省投资项目在线审批监管平台">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                    官网
-                </a>
-                {% endif %}
-            </h3>
-            <span class="badge badge-slate">共 {{ fdtz_count }} 条</span>
-        </div>
-        <div class="scraper-card-meta">
-            {% if last_fdtz %}
-            <div class="meta-row"><span class="meta-label">上次采集</span><span class="meta-value">{{ last_fdtz.finished_at.strftime('%Y-%m-%d %H:%M') if last_fdtz.finished_at else '进行中...' }}</span></div>
-            <div class="meta-row"><span class="meta-label">状态</span><span class="meta-value">
-                {% if last_fdtz.status == '完成' %}<span class="badge badge-green">完成</span>
-                {% elif last_fdtz.status == '失败' %}<span class="badge badge-red">失败</span>
-                {% elif last_fdtz.status == '运行中' %}<span class="badge badge-amber"><span class="spinner spinner-sm"></span> 运行中</span>
-                {% endif %}
-            </span></div>
-            <div class="meta-row"><span class="meta-label">新增</span><span class="meta-value" style="color:var(--green)">{{ last_fdtz.result_count }} 条</span></div>
-            {% else %}
-            <div class="meta-row"><span class="meta-label">状态</span><span class="meta-value text-muted">尚未执行采集</span></div>
-            {% endif %}
-        </div>
-        <button class="btn btn-primary btn-sm w-100 mt-2" id="btn-fdtz" onclick="runScraper('fdtz')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            立即采集
-        </button>
-    </div>
-    <div class="scraper-card">
-        <div class="scraper-card-header">
-            <h3>环评公示采集（工地/项目需求）
+            <h3>{{ entry.label }}{% if source_type != 'eia' %} ({{ source_type }}){% endif %}
+                {% if source_type == 'eia' %}
                 {% for key, region in eia_regions.items() if region.level == 'province' %}
                 <a href="{{ region.list_url }}" target="_blank" rel="noopener" class="site-link" title="打开{{ region.name }}环评公示页面">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
@@ -249,28 +68,38 @@
                     </a>
                     {% endfor %}
                 </div>
+                {% elif src_site %}
+                <a href="{{ src_site }}" target="_blank" rel="noopener" class="site-link" title="打开{{ entry.label }}官网">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    官网
+                </a>
+                {% endif %}
             </h3>
-            <span class="badge badge-slate">共 {{ eia_count }} 条</span>
+            <span class="badge {{ entry.badge_class }}">共 {{ src_count }} 条</span>
         </div>
         <div class="scraper-card-meta">
-            {% if last_eia %}
-            <div class="meta-row"><span class="meta-label">上次采集</span><span class="meta-value">{{ last_eia.finished_at.strftime('%Y-%m-%d %H:%M') if last_eia.finished_at else '进行中...' }}</span></div>
+            {% if src_last %}
+            <div class="meta-row"><span class="meta-label">上次采集</span><span class="meta-value">{{ src_last.finished_at.strftime('%Y-%m-%d %H:%M') if src_last.finished_at else '进行中...' }}</span></div>
             <div class="meta-row"><span class="meta-label">状态</span><span class="meta-value">
-                {% if last_eia.status == '完成' %}<span class="badge badge-green">完成</span>
-                {% elif last_eia.status == '失败' %}<span class="badge badge-red">失败</span>
-                {% elif last_eia.status == '运行中' %}<span class="badge badge-amber"><span class="spinner spinner-sm"></span> 运行中</span>
+                {% if src_last.status == '完成' %}<span class="badge badge-green">完成</span>
+                {% elif src_last.status == '失败' %}<span class="badge badge-red">失败</span>
+                {% elif src_last.status == '运行中' %}<span class="badge badge-amber"><span class="spinner spinner-sm"></span> 运行中</span>
                 {% endif %}
             </span></div>
-            <div class="meta-row"><span class="meta-label">新增</span><span class="meta-value" style="color:var(--green)">{{ last_eia.result_count }} 条</span></div>
+            <div class="meta-row"><span class="meta-label">新增</span><span class="meta-value" style="color:var(--green)">{{ src_last.result_count }} 条</span></div>
             {% else %}
             <div class="meta-row"><span class="meta-label">状态</span><span class="meta-value text-muted">尚未执行采集</span></div>
             {% endif %}
         </div>
-        <button class="btn btn-primary btn-sm w-100 mt-2" id="btn-eia" onclick="runScraper('eia')">
+        <button class="btn btn-primary btn-sm w-100 mt-2" id="btn-{{ source_type }}" onclick="runScraper('{{ source_type }}')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            立即采集（全部 {{ eia_regions|length }} 个地区）
+            {% if source_type == 'eia' %}立即采集（全部 {{ eia_regions|length }} 个地区）
+            {% elif source_type == 'pipebiz' %}立即采集（Playwright渲染）
+            {% elif source_type == 'poi' %}立即采集（默认关键词×广东全省地级市）
+            {% else %}立即采集{% endif %}
         </button>
     </div>
+    {% endfor %}
 </div>
 
 <!-- 手动采集配置 -->
@@ -280,13 +109,9 @@
         <div class="config-row">
             <label>数据源</label>
             <select id="sel-source">
-                <option value="ccgp">中国政府采购网</option>
-                <option value="gdgpo">广东省采购网</option>
-                <option value="ggzyjy">公共资源交易（粤公平）</option>
-                <option value="fdtz">发改委项目审批</option>
-                <option value="poi">地图POI（潜在客户）</option>
-                <option value="eia">环评公示（工地/项目需求）</option>
-                <option value="pipebiz">管道商务网（Playwright）</option>
+                {% for source_type, entry in registry.items() %}
+                <option value="{{ source_type }}">{{ entry.label }}</option>
+                {% endfor %}
                 <option value="all">全部数据源</option>
             </select>
             <label style="margin-left:12px">最大页数</label>

@@ -31,6 +31,13 @@ class Config:
         'ggzyjy': 'https://ygp.gdzwfw.gov.cn/',
         'fdtz': 'https://tzxm.gd.gov.cn/',
         'pipebiz': 'https://www.chinapipe.net/',
+        'ggzyjy_zj': 'https://ggzy.zj.gov.cn/',
+        'gzfcj': 'https://zfcj.gz.gov.cn/',
+        'gdcic': 'https://www.gdcic.net/',
+        'bjx': 'https://huanbao.bjx.com.cn/',
+        'ggzyjy_sc': 'https://ggzyjy.sc.gov.cn/',
+        'ggzyjy_js': 'http://jsggzy.jszwfw.gov.cn/',
+        'qcc': 'https://openapi.qcc.com/',
     }
     # 高德地图 Web服务API Key（个人开发者免费申请：https://lbs.amap.com/ -> 控制台 ->
     # 创建应用 -> 添加Key -> 服务平台选"Web服务"，不要选"Web端(JS API)"）。
@@ -47,6 +54,10 @@ class Config:
         '汕尾', '东莞', '中山', '江门', '阳江', '湛江', '茂名', '肇庆', '清远',
         '潮州', '揭阳', '云浮',
     ]
+    # 企查查开放平台 API Key（需企业实名认证后获取）
+    # 不要把真实Key写进代码仓库，通过环境变量注入
+    QCC_API_KEY = os.environ.get('QCC_API_KEY', '')
+    QCC_DAILY_LIMIT = 100  # 每日最大查询次数（付费接口，控制成本）
     # 详情页快照与附件下载
     SCRAPE_SAVE_SNAPSHOT = True  # 是否保存详情页HTML快照（防止公告被撤回/修改后无法追溯）
     SCRAPE_DOWNLOAD_ATTACHMENTS = True  # 是否下载详情页中的附件（招标文件/报价单等）
