@@ -1,396 +1,353 @@
 # -*- coding: utf-8 -*-
-"""gdcic 数据解析：API JSON 解析 + DOM HTML 解析 → Lead dict。
+"""gdcic API 响应解析（将开放平台 JSON 转为 Lead dict）。
 
-支持两种解析模式：
-1. API JSON 解析（如果成功发现并直调 API）
-2. DOM 解析（如果必须从 Playwright 渲染页面提取）
+字段映射说明（API 字段 → Lead 字段）：
+    projectName           → project_name       （项目名称）
+    provinceBiddingCode   → bidding_number     （中标通知书编号，作为唯一编号）
+    tenderType            → 存入 raw_data      （招标类型：施工/监理/设计等）
+    tenderMode            → 存入 raw_data      （招标方式：公开招标/直接委托等）
+    biddingUnit[].orgName → buyer_name         （中标单位/承包单位，建材获客目标客户）
+    agentOrgName/agentUnit → agency_name       （招标代理机构）
+    address               → buyer_address      （项目地址，详情字段）
+    biddingMoney          → budget_amount      （中标金额，单位万元，详情字段）
+    biddingDate           → publish_date       （招标日期，详情字段）
+    scale                 → 存入 raw_data      （建设规模，详情字段）
+    projectCode           → 存入 raw_data      （项目编号）
+
+注意：
+- 列表 API 返回的 address/biddingDate/biddingMoney/scale/agentUnit 均为 null，
+  需调用详情 API 补全（parse_bidding_detail 处理）。
+- biddingMoney 单位为万元，直接存入 budget_amount（Float），未做单位换算。
+- region 固定为"广东省"（广东住建厅数据源）。
 """
 import logging
-import re
-from urllib.parse import urljoin
 
-from bs4 import BeautifulSoup
-
-from scraper.gdcic.utils import clean_gdcic_text, parse_gdcic_date, extract_gdcic_phone
+from scraper.gdcic.utils import parse_gdcic_date
 
 logger = logging.getLogger(__name__)
 
-# API JSON 字段映射：常见键名 → Lead 字段名
-# 由于 gdcic API 结构未知，列出多种可能的键名以提高兼容性
-_API_FIELD_MAP = {
-    'project_name': [
-        'projectName', 'project_name', 'name', 'title', 'xmcName',
-        'xmmc', 'xmmcName', 'gcName', 'gcmc', 'projectTitle',
-    ],
-    'bidding_number': [
-        'biddingNumber', 'bidding_number', 'projectCode', 'project_code',
-        'xmbh', 'gcbh', 'code', 'no', 'number',
-    ],
-    'announcement_type': [
-        'announcementType', 'type', 'typeName', 'ggType', 'gglx',
-        'noticeType', 'category', 'categoryName',
-    ],
-    'buyer_name': [
-        'buyerName', 'buyer_name', 'purchaser', 'purchaserName',
-        'ownerName', 'owner', 'dwmc', 'jsdw', 'jsdwmc',
-        'constructionUnit', 'unitName',
-    ],
-    'buyer_address': [
-        'buyerAddress', 'address', 'buyer_address', 'dwAddress',
-        'jsdwAddress', 'projectAddress',
-    ],
-    'region': [
-        'region', 'area', 'city', 'areaName', 'cityName',
-        'dq', 'dqmc', 'province', 'projectArea',
-    ],
-    'contact_person': [
-        'contactPerson', 'contact', 'contactName', 'lxr',
-        'lxrxm', 'contact_person',
-    ],
-    'phone': [
-        'phone', 'telephone', 'tel', 'contactPhone', 'lxdh',
-        'lxPhone', 'mobile', 'phone',
-    ],
-    'agency_name': [
-        'agencyName', 'agency', 'agentName', 'dljg', 'dljgmc',
-    ],
-    'agency_phone': [
-        'agencyPhone', 'agencyTel', 'dldh',
-    ],
-    'budget_amount': [
-        'budgetAmount', 'budget', 'amount', 'ysje', 'ysAmount',
-        'totalAmount', 'contractAmount',
-    ],
-    'publish_date': [
-        'publishDate', 'publishTime', 'createTime', 'fbDate',
-        'createDate', 'releaseDate', 'pubDate', 'date',
-    ],
-    'deadline': [
-        'deadline', 'endTime', 'jzDate', 'expiryDate',
-    ],
-    'source_url': [
-        'url', 'detailUrl', 'link', 'href', 'sourceUrl',
-    ],
-}
+# 详情页 URL 模板（开放平台前端 SPA 路由）
+_DETAIL_URL_TPL = 'https://skypt.gdcic.net/openplatform/#/web/project/bidding/detail?id={item_id}'
+
+# 默认地域（广东住建厅数据均属广东省）
+_DEFAULT_REGION = '广东省'
+
+# 默认公告类型（开放平台招投标数据为中标结果）
+_DEFAULT_ANNOUNCEMENT_TYPE = '中标公告'
 
 
-def parse_api_list(rows, base_url='https://www.gdcic.net'):
-    """解析 API JSON 返回的原始数据列表。
+def _text(value):
+    """文本清理辅助函数：str() 防御 + strip()。
 
-    对每条记录尝试多种字段映射，兼容不同的 API 响应结构。
+    替换所有 `(item.get('xxx') or '').strip()` 模式，避免非字符串类型
+    （如 int/None）触发 AttributeError。
+    """
+    return str(value or '').strip()
+
+
+def _join_org_names(org_list):
+    """从组织列表中拼接 orgName，多个用逗号分隔。
 
     Args:
-        rows: API 返回的数据行列表（dict list）
-        base_url: 基础 URL，用于拼接相对路径
+        org_list: [{"orgName": "...", "orgCode": "..."}, ...] 或 None
 
     Returns:
-        list[dict]: Lead dict 列表
+        str: 拼接后的名称字符串，无数据返回空字符串
     """
-    if not rows:
-        return []
+    if not org_list or not isinstance(org_list, list):
+        return ''
+    names = []
+    for org in org_list:
+        if isinstance(org, dict):
+            name = _text(org.get('orgName'))
+            if name:
+                names.append(name)
+    return ','.join(names)
 
-    leads = []
-    for row in rows:
-        if not isinstance(row, dict):
+
+def _join_org_codes(org_list):
+    """从组织列表中拼接 orgCode，多个用逗号分隔。"""
+    if not org_list or not isinstance(org_list, list):
+        return ''
+    codes = []
+    for org in org_list:
+        if isinstance(org, dict):
+            code = _text(org.get('orgCode'))
+            if code:
+                codes.append(code)
+    return ','.join(codes)
+
+
+def _parse_bidding_persons(person_list):
+    """解析 biddingUnitPerson 数组，提取联系人与电话。
+
+    真实 API 数据结构（详情 API 中非空，列表 API 中通常为空数组）：
+        [{"name": "李晓静", "orgName": "...", "orgCode": "...",
+          "post": "项目经理", ...}, ...]
+
+    字段映射：
+        name / personName  → contact_person（多个用逗号拼接）
+        phone / mobile / tel → phone（多个用逗号拼接，真实数据中通常无此字段）
+
+    Args:
+        person_list: biddingUnitPerson 数组或 None
+
+    Returns:
+        (contact_person, phone): 均为 str，无数据返回 ('', '')
+    """
+    if not person_list or not isinstance(person_list, list):
+        return '', ''
+    names = []
+    phones = []
+    for person in person_list:
+        if not isinstance(person, dict):
             continue
-
-        lead = _parse_api_row(row, base_url)
-        if lead and lead.get('project_name'):
-            leads.append(lead)
-
-    logger.info('[gdcic] API 解析: %d 行 → %d 条有效线索', len(rows), len(leads))
-    return leads
-
-
-def _parse_api_row(row, base_url):
-    """解析单条 API 数据行。"""
-    lead = {}
-
-    for lead_field, api_keys in _API_FIELD_MAP.items():
-        for key in api_keys:
-            value = row.get(key)
-            if value is not None and str(value).strip():
-                lead[lead_field] = str(value).strip()
-                break
-
-    # 日期字段特殊处理
-    for date_field in ('publish_date', 'publish_time', 'deadline'):
-        if date_field in lead:
-            date_obj, time_str = parse_gdcic_date(lead[date_field])
-            if date_obj:
-                lead[date_field] = date_obj
-                if time_str and date_field == 'publish_date':
-                    lead['publish_time'] = time_str
-
-    # source_url 补全
-    if lead.get('source_url') and not lead['source_url'].startswith(('http://', 'https://')):
-        lead['source_url'] = urljoin(base_url, lead['source_url'])
-
-    # 从文本中提取电话（如果 phone 字段为空）
-    if not lead.get('phone'):
-        full_text = ' '.join(str(v) for v in row.values() if isinstance(v, str))
-        phone = extract_gdcic_phone(full_text)
+        # 联系人姓名：兼容 name / personName 两种字段名
+        name = _text(person.get('name')) or _text(person.get('personName'))
+        if name:
+            names.append(name)
+        # 电话：兼容 phone / mobile / tel 三种字段名（真实 API 暂未提供）
+        phone = (_text(person.get('phone'))
+                 or _text(person.get('mobile'))
+                 or _text(person.get('tel')))
         if phone:
-            lead['phone'] = phone
+            phones.append(phone)
+    return ','.join(names), ','.join(phones)
 
-    return lead
 
+def _parse_money(money_str):
+    """解析中标金额字符串为 float。
 
-def parse_dom_list(html, base_url='https://www.gdcic.net'):
-    """解析 DOM 渲染页面 HTML，提取列表数据。
-
-    尝试多种常见选择器以适配不同页面结构：
-    1. Element UI 表格
-    2. 常见列表容器
-    3. 通用 fallback：所有含日期的链接
-
-    Args:
-        html: 页面 HTML 字符串
-        base_url: 基础 URL
+    API 返回如 "639.76"（单位万元），转为 float。
 
     Returns:
-        list[dict]: Lead dict 列表
+        float or None
     """
-    if not html:
-        return []
-
-    soup = _make_soup(html)
-    results = []
-
-    # 策略 1：Element UI / Vue 表格
-    table_rows = soup.select(
-        'table.el-table__body tbody tr, '
-        'table tbody tr, '
-        '.el-table__body-wrapper table tbody tr'
-    )
-    # 获取表头
-    headers = _extract_table_headers(soup)
-
-    for row in table_rows:
-        lead = _parse_table_row(row, headers, base_url)
-        if lead and lead.get('project_name'):
-            results.append(lead)
-
-    if results:
-        logger.info('[gdcic] DOM 表格解析: %d 条', len(results))
-        return results
-
-    # 策略 2：列表容器
-    list_items = soup.select(
-        'ul.list li, ul.el-list li, div.list-item, '
-        'div.el-card, div.result-item, div.info-item, '
-        '.data-list .item, .list-container .item'
-    )
-    for item in list_items:
-        lead = _parse_list_item(item, base_url)
-        if lead and lead.get('project_name'):
-            results.append(lead)
-
-    if results:
-        logger.info('[gdcic] DOM 列表解析: %d 条', len(results))
-        return results
-
-    # 策略 3：Fallback — 含日期的链接
-    results = _fallback_parse_links(soup, base_url)
-    logger.info('[gdcic] DOM Fallback 解析: %d 条', len(results))
-    return results
-
-
-def _make_soup(html):
-    """创建 BeautifulSoup 对象。"""
+    if not money_str:
+        return None
     try:
-        return BeautifulSoup(html, 'lxml')
-    except Exception:
-        return BeautifulSoup(html, 'html.parser')
+        return float(str(money_str).strip())
+    except (ValueError, TypeError):
+        logger.debug('[gdcic] 金额解析失败: %s', money_str)
+        return None
 
 
-def _extract_table_headers(soup):
-    """提取表格表头文本列表。"""
-    headers = []
-    header_cells = soup.select(
-        'table.el-table__header th, table thead th, '
-        '.el-table__header-wrapper th'
-    )
-    for cell in header_cells:
-        text = cell.get_text(strip=True)
-        headers.append(text)
-    return headers
+def parse_bidding_list_item(item):
+    """将招投标列表 API 返回的单条数据转为 Lead dict。
 
+    列表项中 address/biddingDate/biddingMoney/scale/agentUnit/biddingUnitPerson
+    通常为 null 或空数组，需后续调用详情 API 补全（parse_bidding_detail）。
 
-def _parse_table_row(row, headers, base_url):
-    """解析表格行，结合表头映射字段。"""
-    cells = row.select('td')
-    if not cells:
+    Args:
+        item: API 返回 rows 数组中的一个元素
+
+    Returns:
+        dict: Lead 字段字典（仅含非空字段），包含 _bidding_id 供详情调用使用
+    """
+    if not isinstance(item, dict):
         return {}
 
-    lead = {}
-    cell_texts = []
-    for cell in cells:
-        cell_texts.append(clean_gdcic_text(cell.get_text()))
+    item_id = _text(item.get('id'))
+    project_name = _text(item.get('projectName'))
 
-    # 如果有表头，按表头映射
-    if headers:
-        kv = {}
-        for i, header in enumerate(headers):
-            if i < len(cell_texts):
-                kv[header] = cell_texts[i]
+    # 无项目名称视为无效记录，直接返回空字典
+    if not project_name:
+        return {}
 
-        lead = _map_kv_to_lead(kv, base_url)
-    else:
-        # 无表头时，尝试从文本内容推断
-        full_text = ' | '.join(cell_texts)
-        lead = _infer_lead_from_text(full_text, base_url)
-
-    # 提取链接
-    link = row.select_one('a[href]')
-    if link:
-        href = link.get('href', '')
-        if href and not href.startswith(('javascript:', '#', 'mailto:')):
-            lead['source_url'] = _resolve_url(href, base_url)
-        if not lead.get('project_name'):
-            lead['project_name'] = clean_gdcic_text(link.get_text())
-
-    return lead
-
-
-def _map_kv_to_lead(kv, base_url):
-    """将表头键值对映射为 Lead dict。"""
-    lead = {}
-
-    # 表头关键词 → Lead 字段映射
-    header_map = {
-        'project_name': ['项目名称', '工程名称', '项目', '名称', '标题', '公告标题', '项目名'],
-        'bidding_number': ['编号', '项目编号', '招标编号', '工程编号', '公告编号'],
-        'announcement_type': ['类型', '公告类型', '类别', '分类'],
-        'buyer_name': ['建设单位', '采购人', '采购单位', '招标人', '业主', '甲方', '单位'],
-        'region': ['地区', '地域', '所在区域', '项目地区', '城市'],
-        'budget_amount': ['金额', '预算', '预算金额', '合同金额', '中标金额'],
-        'publish_date': ['日期', '发布日期', '发布时间', '公告日期', '发布日期', '时间'],
-        'contact_person': ['联系人', '项目联系人'],
-        'phone': ['电话', '联系电话', '联系方式'],
-        'deadline': ['截止日期', '截止时间', '报名截止'],
+    lead = {
+        'project_name': project_name[:500],
+        'bidding_number': _text(item.get('provinceBiddingCode'))[:100],
+        'announcement_type': _DEFAULT_ANNOUNCEMENT_TYPE,
+        'region': _DEFAULT_REGION,
+        'source_url': _DETAIL_URL_TPL.format(item_id=item_id) if item_id else '',
+        # 临时字段：供 _scrape_page 调用详情 API 后 pop 掉
+        '_bidding_id': item_id,
     }
 
-    for lead_field, header_keywords in header_map.items():
-        for header_text, cell_text in kv.items():
-            for kw in header_keywords:
-                if kw in header_text:
-                    lead[lead_field] = cell_text[:500]
-                    break
-            if lead_field in lead:
-                break
+    # 项目 ID 存入 raw_data（与 projectCode 区分，用于项目信息 API 查询）
+    project_id = _text(item.get('projectId'))
+    if project_id:
+        lead['project_id'] = project_id
 
-    # 日期处理
-    if 'publish_date' in lead:
-        date_obj, time_str = parse_gdcic_date(lead['publish_date'])
+    # 中标单位（承包单位）→ buyer_name（建材获客目标客户）
+    bidding_units = item.get('biddingUnit') or []
+    buyer_name = _join_org_names(bidding_units)
+    if buyer_name:
+        lead['buyer_name'] = buyer_name[:200]
+    # 中标单位代码存入 raw_data
+    buyer_codes = _join_org_codes(bidding_units)
+    if buyer_codes:
+        lead['bidding_unit_codes'] = buyer_codes
+
+    # 招标代理机构
+    agency_name = _text(item.get('agentOrgName'))
+    if agency_name:
+        lead['agency_name'] = agency_name[:200]
+
+    # 招标类型/方式存入 raw_data
+    tender_type = _text(item.get('tenderType'))
+    if tender_type:
+        lead['tender_type'] = tender_type
+    tender_mode = _text(item.get('tenderMode'))
+    if tender_mode:
+        lead['tender_mode'] = tender_mode
+
+    # 项目编号存入 raw_data
+    project_code = _text(item.get('projectCode'))
+    if project_code:
+        lead['project_code'] = project_code
+
+    # 数据级别存入 raw_data
+    data_level = _text(item.get('dataLevel'))
+    if data_level:
+        lead['data_level'] = data_level
+
+    # biddingUnitPerson 联系人/电话（列表中通常为空，详情中可能有）。
+    # 此处做防御性解析，非空时映射到 contact_person / phone。
+    persons = item.get('biddingUnitPerson') or []
+    contact_person, phone = _parse_bidding_persons(persons)
+    if contact_person:
+        lead['contact_person'] = contact_person[:50]
+    if phone:
+        lead['phone'] = phone[:50]
+
+    # 过滤空值（保留 _bidding_id 即使为空，便于后续 pop）
+    return {k: v for k, v in lead.items() if v not in (None, '') or k == '_bidding_id'}
+
+
+def parse_bidding_detail(detail):
+    """解析招投标详情 API 返回的数据，提取列表中为 null 的补充字段。
+
+    Args:
+        detail: 详情 API 返回的单条记录 dict
+
+    Returns:
+        dict: 补充字段字典（address/biddingDate/biddingMoney/scale/agentUnit/
+              biddingUnitPerson 等）
+    """
+    if not isinstance(detail, dict):
+        return {}
+
+    result = {}
+
+    # 项目地址
+    address = _text(detail.get('address'))
+    if address:
+        result['buyer_address'] = address[:300]
+
+    # 招标日期
+    bidding_date_str = _text(detail.get('biddingDate'))
+    if bidding_date_str:
+        date_obj, time_str = parse_gdcic_date(bidding_date_str)
         if date_obj:
-            lead['publish_date'] = date_obj
+            result['publish_date'] = date_obj
             if time_str:
-                lead['publish_time'] = time_str
+                result['publish_time'] = time_str
 
-    return lead
+    # 中标金额（单位万元）
+    money = _parse_money(detail.get('biddingMoney'))
+    if money is not None:
+        result['budget_amount'] = money
+
+    # 建设规模存入 raw_data
+    scale = _text(detail.get('scale'))
+    if scale:
+        result['scale'] = scale
+
+    # 招标代理机构（详情中的 agentUnit 数组优先于列表中的 agentOrgName）
+    agent_units = detail.get('agentUnit') or []
+    agency_name = _join_org_names(agent_units)
+    if agency_name:
+        result['agency_name'] = agency_name[:200]
+    elif _text(detail.get('agentOrgName')):
+        result['agency_name'] = _text(detail.get('agentOrgName'))[:200]
+    # 代理机构代码（与 bidding_unit_codes 对称）存入 raw_data
+    agent_codes = _join_org_codes(agent_units)
+    if agent_codes:
+        result['agent_unit_codes'] = agent_codes
+
+    # 详情中可能补全的中标单位（如果列表中为空），直接赋值覆盖
+    bidding_units = detail.get('biddingUnit') or []
+    buyer_name = _join_org_names(bidding_units)
+    if buyer_name:
+        result['buyer_name'] = buyer_name[:200]
+    buyer_codes = _join_org_codes(bidding_units)
+    if buyer_codes:
+        result['bidding_unit_codes'] = buyer_codes
+
+    # biddingUnitPerson 联系人/电话（详情 API 中通常非空，列表中为空数组）
+    persons = detail.get('biddingUnitPerson') or []
+    contact_person, phone = _parse_bidding_persons(persons)
+    if contact_person:
+        result['contact_person'] = contact_person[:50]
+    if phone:
+        result['phone'] = phone[:50]
+
+    return result
 
 
-def _infer_lead_from_text(text, base_url):
-    """从纯文本推断 Lead 字段。"""
-    lead = {}
+def parse_project_info(info):
+    """解析项目信息 API 返回的数据，补全建设单位/总投资/项目所在地等字段。
 
-    # 提取项目名称（通常是最长的一段中文文本）
-    # 简单策略：取前 200 字符作为项目名称
-    parts = [p.strip() for p in text.split('|') if p.strip()]
+    真实 API 字段名（已用真实接口确认）：
+        province / city / division  → 项目所在地（省/市/区）
+        buildUnit                   → 建设单位
+        totalInvestment             → 总投资（万元）
+        totalArea                   → 总面积
+        scale                       → 建设规模
+
+    为兼容字段名可能的变化，同时尝试旧字段名（provinceName/cityName/
+    districtName/totalInvest/buildScale）作为回退。
+
+    Args:
+        info: 项目信息 API 返回的记录 dict（字段在顶层，无 code/data 包装）
+
+    Returns:
+        dict: 补充字段字典（project_location/build_unit/total_invest/
+              total_area/build_scale）
+    """
+    if not isinstance(info, dict):
+        return {}
+
+    result = {}
+
+    # 项目所在地（省/市/区拼接），兼容 province/provinceName 两种字段名
+    province = _text(info.get('province')) or _text(info.get('provinceName'))
+    city = _text(info.get('city')) or _text(info.get('cityName'))
+    district = _text(info.get('division')) or _text(info.get('districtName'))
+    parts = [p for p in (province, city, district) if p]
     if parts:
-        # 取最长的部分作为项目名称
-        longest = max(parts, key=len)
-        if len(longest) >= 4:
-            lead['project_name'] = longest[:500]
+        result['project_location'] = ''.join(parts)
 
-    # 提取日期
-    date_match = re.search(r'\d{4}[-/.]\d{1,2}[-/.]\d{1,2}', text)
-    if date_match:
-        date_obj, time_str = parse_gdcic_date(date_match.group(0))
-        if date_obj:
-            lead['publish_date'] = date_obj
-
-    return lead
-
-
-def _parse_list_item(item, base_url):
-    """解析列表项（div/li）。"""
-    lead = {}
-
-    # 标题 + 链接
-    title_tag = item.select_one('a[href], h3 a, h4 a, .title a, .name a')
-    if title_tag:
-        lead['project_name'] = clean_gdcic_text(title_tag.get_text())
-        href = title_tag.get('href', '')
-        if href and not href.startswith(('javascript:', '#', 'mailto:')):
-            lead['source_url'] = _resolve_url(href, base_url)
-
-    # 日期
-    date_el = item.select_one('.date, .time, .pub-date, span[class*="date"]')
-    if date_el:
-        date_text = date_el.get_text(strip=True)
-        date_obj, time_str = parse_gdcic_date(date_text)
-        if date_obj:
-            lead['publish_date'] = date_obj
-            if time_str:
-                lead['publish_time'] = time_str
+    # 建设单位（项目信息中的建设单位，非中标单位）
+    # 真实 API 中 buildUnit 是组织数组（含 orgName/orgCode），与 biddingUnit 结构一致；
+    # 兼容旧版可能返回字符串的情况
+    build_unit_raw = info.get('buildUnit')
+    if isinstance(build_unit_raw, list):
+        build_unit = _join_org_names(build_unit_raw)
+        build_unit_codes = _join_org_codes(build_unit_raw)
+        if build_unit_codes:
+            result['build_unit_codes'] = build_unit_codes
     else:
-        # 从文本中提取日期
-        full_text = item.get_text()
-        date_match = re.search(r'\d{4}[-/.]\d{1,2}[-/.]\d{1,2}', full_text)
-        if date_match:
-            date_obj, time_str = parse_gdcic_date(date_match.group(0))
-            if date_obj:
-                lead['publish_date'] = date_obj
+        build_unit = _text(build_unit_raw)
+    if build_unit:
+        result['build_unit'] = build_unit[:200]
 
-    # 类型标签
-    type_el = item.select_one('.type, .tag, .label, span[class*="type"]')
-    if type_el:
-        lead['announcement_type'] = clean_gdcic_text(type_el.get_text())[:50]
+    # 总投资，兼容 totalInvestment/totalInvest 两种字段名
+    total_invest = _parse_money(info.get('totalInvestment'))
+    if total_invest is None:
+        total_invest = _parse_money(info.get('totalInvest'))
+    if total_invest is not None:
+        result['total_invest'] = total_invest
 
-    return lead
+    # 总面积
+    total_area = _text(info.get('totalArea'))
+    if total_area:
+        result['total_area'] = total_area
 
+    # 建设规模，兼容 scale/buildScale 两种字段名
+    build_scale = _text(info.get('scale')) or _text(info.get('buildScale'))
+    if build_scale:
+        result['build_scale'] = build_scale
 
-def _fallback_parse_links(soup, base_url):
-    """Fallback：从所有链接中提取含日期的条目。"""
-    results = []
-    date_pattern = re.compile(r'\d{4}[-/.]\d{1,2}[-/.]\d{1,2}')
-
-    for a_tag in soup.select('a[href]'):
-        text = clean_gdcic_text(a_tag.get_text())
-        if not text or len(text) < 5:
-            continue
-
-        href = a_tag.get('href', '')
-        if not href or href in ('#', '/', 'javascript:void(0)'):
-            continue
-
-        # 检查父节点中是否有日期
-        parent = a_tag.parent
-        parent_text = parent.get_text() if parent else ''
-        date_match = date_pattern.search(parent_text)
-
-        if date_match:
-            date_obj, time_str = parse_gdcic_date(date_match.group(0))
-            lead = {
-                'project_name': text[:500],
-                'source_url': _resolve_url(href, base_url),
-            }
-            if date_obj:
-                lead['publish_date'] = date_obj
-            if time_str:
-                lead['publish_time'] = time_str
-            results.append(lead)
-
-    return results
-
-
-def _resolve_url(href, base_url):
-    """将相对 URL 转为绝对 URL。"""
-    if not href:
-        return ''
-    href = href.strip()
-    if href.startswith(('http://', 'https://')):
-        return href
-    return urljoin(base_url, href)
+    return result

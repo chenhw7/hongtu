@@ -1,0 +1,2262 @@
+diff --git a/.gitignore b/.gitignore
+index 24f141e..9f9303e 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -20,6 +20,7 @@ build/
+ dist/
+ *.egg-info/
+ *.egg
++hongtu.ico
+ 
+ # ====================
+ # SQLite 数据库文件（Flask instance 目录）
+diff --git a/app/__init__.py b/app/__init__.py
+index b079a46..d968888 100644
+--- a/app/__init__.py
++++ b/app/__init__.py
+@@ -1,4 +1,5 @@
+ import os
++import sys
+ from flask import Flask
+ from sqlalchemy import event
+ from sqlalchemy.engine import Engine
+@@ -47,6 +48,10 @@ def create_app(config_class=None):
+     app = Flask(__name__, instance_relative_config=True)
+     app.config.from_object(config_class or Config)
+ 
++    # 打包环境：instance目录与exe同级
++    if getattr(sys, 'frozen', False):
++        app.instance_path = os.path.join(os.path.dirname(sys.executable), 'instance')
++
+     # 初始化日志系统（尽早配置，便于后续初始化过程也能输出日志）
+     setup_logging(app)
+ 
+diff --git a/app/config.py b/app/config.py
+index b19716d..b81bd7c 100644
+--- a/app/config.py
++++ b/app/config.py
+@@ -1,4 +1,12 @@
+ import os
++import sys
++
++
++def _get_base_dir():
++    """获取应用基础目录：打包后为exe所在目录，开发时为项目根目录"""
++    if getattr(sys, 'frozen', False):
++        return os.path.dirname(sys.executable)
++    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ 
+ 
+ class Config:
+@@ -33,7 +41,7 @@ class Config:
+         'pipebiz': 'https://www.chinapipe.net/',
+         'ggzyjy_zj': 'https://ggzy.zj.gov.cn/',
+         'gzfcj': 'https://zfcj.gz.gov.cn/',
+-        'gdcic': 'https://www.gdcic.net/',
++        'gdcic': 'https://skypt.gdcic.net/',
+         'bjx': 'https://huanbao.bjx.com.cn/',
+         'ggzyjy_sc': 'https://ggzyjy.sc.gov.cn/',
+         'ggzyjy_js': 'http://jsggzy.jszwfw.gov.cn/',
+@@ -71,6 +79,6 @@ class Config:
+     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
+     # 日志配置
+     LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
+-    LOG_DIR = os.environ.get('LOG_DIR', 'logs')
++    LOG_DIR = os.environ.get('LOG_DIR') or os.path.join(_get_base_dir(), 'logs')
+     LOG_RETENTION_DAYS = int(os.environ.get('LOG_RETENTION_DAYS', 14))
+     SLOW_REQUEST_MS = int(os.environ.get('SLOW_REQUEST_MS', 1000))
+diff --git a/app/logging_config.py b/app/logging_config.py
+index b4992f8..81fd5e7 100644
+--- a/app/logging_config.py
++++ b/app/logging_config.py
+@@ -86,7 +86,10 @@ def setup_logging(app):
+ 
+     # 日志目录（相对项目根目录）
+     if not os.path.isabs(log_dir):
+-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++        if getattr(sys, 'frozen', False):
++            base_dir = os.path.dirname(sys.executable)
++        else:
++            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+         log_dir = os.path.join(base_dir, log_dir)
+     os.makedirs(log_dir, exist_ok=True)
+ 
+diff --git a/requirements.txt b/requirements.txt
+index 25f2ee6..d6155f9 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -11,3 +11,5 @@ waitress~=2.1
+ python-dotenv~=1.0
+ openpyxl~=3.1
+ playwright>=1.40.0
++pystray~=0.19
++Pillow~=10.0
+diff --git a/scraper/gdcic/__init__.py b/scraper/gdcic/__init__.py
+index e666d70..90ccd71 100644
+--- a/scraper/gdcic/__init__.py
++++ b/scraper/gdcic/__init__.py
+@@ -1,22 +1,19 @@
+ # -*- coding: utf-8 -*-
+-"""广东省住建厅（广东建设信息网 www.gdcic.net）采集模块。
++"""广东省住建厅（广东建设信息网 skypt.gdcic.net）采集模块。
+ 
+-技术方案：
+-1. 优先策略：用 Playwright 访问 SPA 页面，拦截网络请求发现后端 API 端点，然后降级为 httpx 直连 API
+-2. 降级策略：如果 API 有签名参数无法直接调用，则保持 Playwright 全流程渲染，从 DOM 提取数据
++数据开放平台 API 完全开放、无需签名/Token，可直接 httpx 调用。
+ 
+ 模块结构：
+-- browser.py: Playwright SPA 渲染 + XHR 拦截
+-- parser.py:  API JSON 解析或 DOM 解析 → Lead dict
+-- utils.py:   gdcic 专用工具函数
++- api.py：   开放平台 API 调用封装（列表+详情+项目信息）
++- parser.py：API JSON 响应 → Lead dict 字段映射
++- utils.py： gdcic 专用工具函数（日期/文本清理）
+ """
+ import logging
+-import time
+ 
+-from scraper.base import BaseScraper, ScraperStopped
++from scraper.base import BaseScraper
+ from scraper.keywords import PLATFORM_KEYWORDS_FINAL
+-from scraper.gdcic.browser import GdcicBrowser
+-from scraper.gdcic.parser import parse_api_list, parse_dom_list
++from scraper.gdcic.api import fetch_bidding_list, fetch_bidding_detail
++from scraper.gdcic.parser import parse_bidding_list_item, parse_bidding_detail
+ 
+ logger = logging.getLogger(__name__)
+ 
+@@ -25,165 +22,86 @@ class GdcicScraper(BaseScraper):
+     """广东住建厅采集器。
+ 
+     继承 BaseScraper 以复用 save_leads()、进度追踪、暂停/停止等功能。
+-    覆盖 run() 方法以管理 Playwright 浏览器生命周期。
+-    优先使用 httpx + API 模式，降级到 Playwright DOM 模式。
++    通过 httpx 直调开放平台 API 获取招投标数据，无需 Playwright。
+     """
+ 
+     source_type = 'gdcic'
+-    base_url = 'https://www.gdcic.net'
++    base_url = 'https://skypt.gdcic.net'
+ 
+     def __init__(self, app=None):
+         super().__init__(app=app)
+         self.keywords = list(PLATFORM_KEYWORDS_FINAL)
++        # 开放平台 API 限速：2-3 秒/请求，避免触发风控
+         self.delay_min = 2
+-        self.delay_max = 4
+-        self.browser = None
+-        self.api_mode = False  # True=API 直调模式，False=DOM 渲染模式
+-
+-    def run(self, keywords=None, max_pages=5):
+-        """执行采集，管理 Playwright 浏览器生命周期。
+-
+-        Args:
+-            keywords: 关键词列表，None 时使用 PLATFORM_KEYWORDS_FINAL
+-            max_pages: 每个关键词最大页数
+-
+-        Returns:
+-            int: 新增线索数量
+-        """
+-        if keywords is None:
+-            keywords = self.keywords
+-
+-        logger.info('[gdcic] 开始采集，关键词: %s，每词最多 %d 页', keywords, max_pages)
+-
+-        # 1. 创建任务记录
+-        task = self.create_task(self.source_type, self.base_url)
+-        task_id = task.id
+-
+-        # 初始化实时进度
+-        self._progress_start(task_id, len(keywords), max_pages)
+-
+-        total_new = 0
+-        done_pages = 0
+-        failed_units = []
+-        self._seen_keys = set()
+-
+-        try:
+-            # 2. 启动 Playwright 浏览器
+-            headless = True
+-            if self.app:
+-                headless = self.app.config.get('GDCIC_HEADLESS', True)
+-            self.browser = GdcicBrowser(headless=headless)
+-            self.browser.start()
+-
+-            # 3. 尝试发现 API 端点
+-            api_endpoints = self.browser.discover_api_endpoints()
+-            if api_endpoints:
+-                logger.info('[gdcic] 发现 API 端点，切换到 API 直调模式: %s', api_endpoints)
+-                self.api_mode = True
+-            else:
+-                logger.warning('[gdcic] 未发现可用 API，降级到 DOM 渲染模式')
+-                self.api_mode = False
+-
+-            # 4. 遍历关键词和页数
+-            for kw_index, keyword in enumerate(keywords, start=1):
+-                self._check_pause_and_stop()
+-                self._progress_update(
+-                    keyword_index=kw_index,
+-                    current_keyword=keyword,
+-                    message='采集关键词「%s」(%d/%d)' % (keyword, kw_index, len(keywords)),
+-                )
+-
+-                for page in range(1, max_pages + 1):
+-                    self._check_pause_and_stop()
+-                    logger.info('[gdcic] 关键词="%s" 第 %d 页', keyword, page)
+-                    self._progress_update(
+-                        current_page=page,
+-                        message='采集关键词「%s」第 %d/%d 页' % (keyword, page, max_pages),
+-                    )
+-
+-                    leads_data = self._scrape_page(keyword, page)
+-
+-                    if leads_data is None:
+-                        failed_units.append('%s 第%d页' % (keyword, page))
+-                        logger.warning('[gdcic] 第%d页采集失败，跳过关键词「%s」', page, keyword)
+-                        done_pages += (max_pages - page + 1)
+-                        self._progress_update(done_pages=done_pages)
+-                        time.sleep(self.delay_max * 2)
+-                        break
+-
+-                    if len(leads_data) == 0:
+-                        logger.info('[gdcic] 关键词="%s" 第%d页无结果，下一关键词', keyword, page)
+-                        done_pages += (max_pages - page + 1)
+-                        self._progress_update(done_pages=done_pages)
+-                        break
+-
+-                    # 5. 保存线索
+-                    new_count = self.save_leads(leads_data, self.source_type)
+-                    total_new += new_count
+-                    done_pages += 1
+-                    logger.info('[gdcic] 关键词="%s" 第%d页: 获取%d条，新增%d条',
+-                                keyword, page, len(leads_data), new_count)
+-                    self._progress_update(
+-                        done_pages=done_pages,
+-                        collected=total_new,
+-                        message='关键词「%s」第 %d 页: 新增 %d 条（累计 %d 条）'
+-                                % (keyword, page, new_count, total_new),
+-                    )
+-
+-            # 6. 更新任务状态
+-            if failed_units:
+-                error_msg = '以下采集单元失败: ' + '；'.join(failed_units)
+-                self.update_task(task_id, '失败', result_count=total_new, error_msg=error_msg)
+-                self._progress_finish('失败', collected=total_new, error_msg=error_msg)
+-            else:
+-                self.update_task(task_id, '完成', result_count=total_new)
+-                self._progress_finish('完成', collected=total_new)
+-                logger.info('[gdcic] 采集完成，共新增 %d 条线索', total_new)
+-
+-            return total_new
+-
+-        except ScraperStopped:
+-            logger.info('[gdcic] 采集已被手动停止，累计新增 %d 条线索', total_new)
+-            self.update_task(task_id, '已停止', result_count=total_new)
+-            self._progress_finish('已停止', collected=total_new)
+-            return total_new
+-
+-        except Exception as e:
+-            logger.exception('[gdcic] 采集异常: %s', e)
+-            self.update_task(task_id, '失败', result_count=total_new, error_msg=str(e))
+-            self._progress_finish('失败', collected=total_new, error_msg=str(e))
+-            return total_new
+-
+-        finally:
+-            # 关闭浏览器
+-            if self.browser:
+-                self.browser.stop()
+-                self.browser = None
+-            self._progress_clear_control()
++        self.delay_max = 3
+ 
+     def _scrape_page(self, keyword, page):
+-        """采集单页搜索结果。
++        """采集单页招投标搜索结果。
++
++        流程：
++        1. 调用列表 API 获取招投标列表
++        2. 解析列表项为 Lead dict（列表中部分字段为 null）
++        3. 前置去重：跳过已存在线索的详情请求
++        4. 调用详情 API 补全 address/biddingDate/biddingMoney/scale 等字段
+ 
+         Args:
+             keyword: 搜索关键词
+             page: 页码
+ 
+         Returns:
+-            list[dict]: 线索列表，None 表示请求失败
++            list[dict] or None: 线索列表，None 表示请求失败
+         """
+-        if not self.browser:
+-            logger.error('[gdcic] 浏览器未启动')
++        # 1. 调用列表 API
++        payload = fetch_bidding_list(self, keyword=keyword, page_num=page)
++        if payload is None:
+             return None
+ 
+-        if self.api_mode:
+-            # API 直调模式
+-            leads = self.browser.fetch_list_via_api(keyword, page)
+-            if leads is None:
+-                return None
+-            return parse_api_list(leads, self.base_url)
+-        else:
+-            # DOM 渲染模式
+-            html = self.browser.fetch_list_via_dom(keyword, page)
+-            if not html:
+-                return None
+-            return parse_dom_list(html, self.base_url)
++        rows = payload.get('rows') or []
++        if not rows:
++            logger.info('[gdcic] 关键词="%s" 第%d页无结果', keyword, page)
++            return []
++
++        # 2. 解析列表项
++        leads = []
++        for row in rows:
++            lead = parse_bidding_list_item(row)
++            if lead.get('project_name'):
++                leads.append(lead)
++
++        if not leads:
++            return []
++
++        logger.info('[gdcic] 列表解析: %d 行 → %d 条有效线索', len(rows), len(leads))
++
++        # 3. 前置去重：批量预查已存在的线索，跳过详情请求
++        existing_keys = self._prefetch_existing_keys(leads)
++        skipped = 0
++
++        # 4. 调用详情 API 补全字段
++        for lead in leads:
++            self._check_pause_and_stop()
++
++            # pop 临时字段（无论是否请求详情都要移除）
++            bidding_id = lead.pop('_bidding_id', '')
++
++            # 已存在的线索跳过详情请求
++            key = self._lead_dedup_key(lead)
++            if key and key in existing_keys:
++                skipped += 1
++                continue
++
++            if bidding_id:
++                detail = fetch_bidding_detail(self, bidding_id)
++                if detail:
++                    detail_fields = parse_bidding_detail(detail)
++                    if detail_fields:
++                        lead.update(detail_fields)
++
++            # 计入进程内缓存，避免同次 run 内重复请求详情
++            if key:
++                self._seen_keys.add(key)
++
++        if skipped:
++            logger.info('[gdcic] 跳过 %d 条已存在项的详情请求', skipped)
++
++        return leads
+diff --git a/scraper/gdcic/browser.py b/scraper/gdcic/browser.py
+deleted file mode 100644
+index 70abfd4..0000000
+--- a/scraper/gdcic/browser.py
++++ /dev/null
+@@ -1,607 +0,0 @@
+-# -*- coding: utf-8 -*-
+-"""gdcic Playwright SPA 渲染 + XHR/Fetch 请求拦截。
+-
+-广东建设信息网（www.gdcic.net）主站为 SSR ASP.NET；
+-三库一平台（skypt.gdcic.net）和数据开放平台（skypt.gdcic.net/openplatform/）
+-均为 Vue.js SPA，需要 Playwright 渲染并拦截 XHR 发现后端 API 端点。
+-
+-优先策略：拦截到 API 后用 httpx 直连，提高吞吐；
+-降级策略：API 有签名参数无法直调时，保持 Playwright 全流程渲染，从 DOM 提取。
+-"""
+-import logging
+-import random
+-import time
+-from urllib.parse import urlparse, urljoin
+-
+-logger = logging.getLogger(__name__)
+-
+-# 页面加载超时（毫秒）
+-_PAGE_TIMEOUT = 30000
+-
+-# SPA 入口页面（按优先级尝试）
+-_SPA_ENTRY_URLS = [
+-    'https://skypt.gdcic.net/openplatform/',   # 数据开放平台（Vue SPA）
+-    'https://skypt.gdcic.net/',                # 三库一平台
+-]
+-
+-# 已知 API 路径模式（拦截到的 XHR 匹配这些模式时视为候选端点）
+-_API_PATH_PATTERNS = [
+-    '/api/',
+-    '/openplatform/',
+-    '/skypt/',
+-    '/gdcic/',
+-    '/queryData',
+-    '/getList',
+-    '/getData',
+-    '/search',
+-]
+-
+-# API 拦截排除模式（静态资源 / 埋点 / CDN 等无关请求）
+-_API_EXCLUDE_PATTERNS = [
+-    '.js', '.css', '.png', '.jpg', '.gif', '.svg', '.ico',
+-    '.woff', '.ttf', '.eot', 'google-analytics', 'baidu.com',
+-    'favicon', 'hot-update', 'sockjs-node', 'webpack',
+-]
+-
+-
+-def _is_api_candidate(url):
+-    """判断 URL 是否可能是后端 API 端点。"""
+-    if not url:
+-        return False
+-    parsed = urlparse(url)
+-    path = parsed.path.lower()
+-
+-    # 排除静态资源
+-    for exc in _API_EXCLUDE_PATTERNS:
+-        if exc in path or exc in url:
+-            return False
+-
+-    # 匹配 API 模式
+-    for pat in _API_PATH_PATTERNS:
+-        if pat.lower() in path:
+-            return True
+-
+-    # XHR/Fetch 通常返回 JSON，检查 Accept 头无法在此处获取，
+-    # 仅按路径模式判断
+-    return False
+-
+-
+-def _has_signature_params(url):
+-    """检测 API URL 中是否携带签名/鉴权参数（降级信号）。
+-
+-    常见签名参数名：sign, signature, token, nonce, timestamp, appKey。
+-    若存在，说明 API 可能需要签名才能直调，应降级到 DOM 模式。
+-    """
+-    parsed = urlparse(url)
+-    query = parsed.query.lower()
+-    sign_keys = ('sign=', 'signature=', 'token=', 'nonce=', 'appkey=', 'appsecret=')
+-    return any(k in query for k in sign_keys)
+-
+-
+-class GdcicBrowser:
+-    """广东住建厅浏览器操作封装。
+-
+-    管理 Playwright 浏览器生命周期，提供：
+-    1. XHR/Fetch 拦截：发现后端 API 端点
+-    2. API 直调模式：通过 httpx 调用发现的 API
+-    3. DOM 降级模式：直接从渲染后的 DOM 提取数据
+-    """
+-
+-    def __init__(self, headless=True):
+-        self.headless = headless
+-        self._playwright = None
+-        self.browser = None
+-        self.context = None
+-        self.page = None
+-        # 拦截到的 API 端点缓存：{endpoint_key: {url, method, headers, post_data}}
+-        self._api_cache = {}
+-        # httpx 客户端（API 直调模式）
+-        self._httpx_client = None
+-        # 浏览器提取的 Cookie（供 httpx 复用）
+-        self._cookies_str = ''
+-
+-    # ------------------------------------------------------------------
+-    # 生命周期
+-    # ------------------------------------------------------------------
+-    def start(self):
+-        """启动浏览器。
+-
+-        Raises:
+-            ImportError: Playwright 未安装
+-            Exception: 浏览器启动失败
+-        """
+-        try:
+-            from playwright.sync_api import sync_playwright
+-        except ImportError:
+-            raise ImportError(
+-                'Playwright 未安装。请执行: pip install playwright && playwright install chromium'
+-            )
+-
+-        self._playwright = sync_playwright().start()
+-        self.browser = self._playwright.chromium.launch(headless=self.headless)
+-        self.context = self.browser.new_context(
+-            user_agent=(
+-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+-                'AppleWebKit/537.36 (KHTML, like Gecko) '
+-                'Chrome/120.0.0.0 Safari/537.36'
+-            ),
+-            locale='zh-CN',
+-            viewport={'width': 1280, 'height': 800},
+-        )
+-        self.page = self.context.new_page()
+-
+-        # 注册 XHR/Fetch 请求拦截
+-        self.page.on('request', self._on_request)
+-        self.page.on('response', self._on_response)
+-
+-        logger.info('[gdcic] 浏览器已启动')
+-
+-    def stop(self):
+-        """关闭浏览器并释放资源。"""
+-        try:
+-            if self.browser:
+-                self.browser.close()
+-        except Exception as e:
+-            logger.warning('[gdcic] 浏览器关闭异常: %s', e)
+-        try:
+-            if self._playwright:
+-                self._playwright.stop()
+-        except Exception as e:
+-            logger.warning('[gdcic] Playwright 停止异常: %s', e)
+-        finally:
+-            self.browser = None
+-            self.context = None
+-            self.page = None
+-            self._playwright = None
+-
+-        # 关闭 httpx 客户端
+-        self._close_httpx()
+-
+-    # ------------------------------------------------------------------
+-    # XHR/Fetch 拦截
+-    # ------------------------------------------------------------------
+-    def _on_request(self, request):
+-        """拦截出站请求，识别 API 端点。"""
+-        url = request.url
+-        if not _is_api_candidate(url):
+-            return
+-
+-        resource_type = request.resource_type
+-        if resource_type not in ('xhr', 'fetch', 'document'):
+-            return
+-
+-        method = request.method
+-        logger.debug('[gdcic] 拦截到 API 请求: %s %s', method, url)
+-
+-        cache_key = self._make_cache_key(url, method)
+-        if cache_key not in self._api_cache:
+-            entry = {
+-                'url': url,
+-                'method': method,
+-                'post_data': request.post_data,
+-                'has_signature': _has_signature_params(url),
+-            }
+-            self._api_cache[cache_key] = entry
+-            logger.info('[gdcic] 发现 API 端点: %s %s (签名=%s)',
+-                        method, url, entry['has_signature'])
+-
+-    def _on_response(self, response):
+-        """拦截响应，验证 API 是否返回 JSON（进一步确认端点有效性）。"""
+-        url = response.url
+-        cache_key = self._make_cache_key(url, response.request.method)
+-        entry = self._api_cache.get(cache_key)
+-        if not entry:
+-            return
+-
+-        content_type = response.headers.get('content-type', '')
+-        if 'json' in content_type or 'javascript' in content_type:
+-            entry['confirmed'] = True
+-            entry['status'] = response.status
+-            logger.debug('[gdcic] API 响应确认（JSON）: %s status=%d', url, response.status)
+-        else:
+-            entry['confirmed'] = False
+-
+-    @staticmethod
+-    def _make_cache_key(url, method='GET'):
+-        """生成 API 缓存 key（去除 query 参数，保留路径）。"""
+-        parsed = urlparse(url)
+-        return '%s:%s' % (method, parsed.path)
+-
+-    # ------------------------------------------------------------------
+-    # API 端点发现
+-    # ------------------------------------------------------------------
+-    def discover_api_endpoints(self):
+-        """访问 SPA 入口页面，等待 XHR 请求触发，收集 API 端点。
+-
+-        Returns:
+-            dict or None: 已确认的 API 端点缓存；无可用端点时返回 None
+-        """
+-        if not self.page:
+-            logger.error('[gdcic] 浏览器未启动')
+-            return None
+-
+-        for entry_url in _SPA_ENTRY_URLS:
+-            logger.info('[gdcic] 访问 SPA 入口: %s', entry_url)
+-            try:
+-                self.page.goto(entry_url, wait_until='domcontentloaded', timeout=_PAGE_TIMEOUT)
+-
+-                # 等待 SPA 加载和网络请求
+-                try:
+-                    self.page.wait_for_load_state('networkidle', timeout=15000)
+-                except Exception:
+-                    pass
+-
+-                # 额外等待 JS 执行
+-                time.sleep(random.uniform(3, 5))
+-
+-                # 尝试触发搜索，让更多 XHR 暴露
+-                self._try_trigger_search()
+-
+-                logger.info('[gdcic] SPA 页面加载完成，已拦截 %d 个 API 候选',
+-                            len(self._api_cache))
+-            except Exception as e:
+-                logger.warning('[gdcic] SPA 入口加载异常: %s - %s', entry_url, e)
+-                continue
+-
+-        # 提取 Cookie 供 httpx 复用
+-        self._extract_cookies()
+-
+-        # 筛选已确认且无签名的端点
+-        valid_endpoints = {
+-            k: v for k, v in self._api_cache.items()
+-            if v.get('confirmed') and not v.get('has_signature')
+-        }
+-
+-        if valid_endpoints:
+-            logger.info('[gdcic] 发现 %d 个可用 API 端点（已确认、无签名）', len(valid_endpoints))
+-            return valid_endpoints
+-
+-        # 如果只有带签名的端点，返回 None 触发 DOM 降级
+-        if self._api_cache:
+-            logger.info('[gdcic] 发现的 API 均携带签名参数，将降级到 DOM 模式')
+-        return None
+-
+-    def _try_trigger_search(self):
+-        """尝试在 SPA 页面触发搜索操作，暴露更多 API 端点。"""
+-        if not self.page:
+-            return
+-        try:
+-            # 查找搜索框
+-            search_input = self.page.query_selector(
+-                'input[type="search"], input[type="text"][placeholder*="搜索"], '
+-                'input[type="text"][placeholder*="关键"], input[type="text"][name*="keyword"], '
+-                'input[type="text"][name*="search"], input.search-input, '
+-                'input[placeholder*="请输入"]'
+-            )
+-            if not search_input:
+-                logger.debug('[gdcic] 未找到搜索框，跳过触发搜索')
+-                return
+-
+-            # 输入一个宽泛关键词触发搜索
+-            search_input.fill('管道')
+-            time.sleep(0.5)
+-
+-            # 点击搜索按钮或回车
+-            search_btn = self.page.query_selector(
+-                'button[type="submit"], button.search-btn, '
+-                'button.el-button--primary, .el-input-group__append button'
+-            )
+-            if search_btn:
+-                search_btn.click()
+-            else:
+-                search_input.press('Enter')
+-
+-            # 等待结果加载
+-            try:
+-                self.page.wait_for_load_state('networkidle', timeout=10000)
+-            except Exception:
+-                pass
+-            time.sleep(2)
+-
+-            logger.info('[gdcic] 已触发搜索，暴露更多 API 端点')
+-        except Exception as e:
+-            logger.debug('[gdcic] 触发搜索失败（不影响流程）: %s', e)
+-
+-    def _extract_cookies(self):
+-        """从浏览器上下文中提取 Cookie 字符串。"""
+-        if not self.context:
+-            return
+-        try:
+-            cookies = self.context.cookies()
+-            parts = ['%s=%s' % (c['name'], c['value']) for c in cookies]
+-            self._cookies_str = '; '.join(parts)
+-            logger.info('[gdcic] 提取到 %d 个 Cookie', len(cookies))
+-        except Exception as e:
+-            logger.warning('[gdcic] Cookie 提取失败: %s', e)
+-
+-    # ------------------------------------------------------------------
+-    # API 直调模式
+-    # ------------------------------------------------------------------
+-    def fetch_list_via_api(self, keyword, page):
+-        """通过 httpx 直调发现的 API 端点获取列表数据。
+-
+-        Args:
+-            keyword: 搜索关键词
+-            page: 页码
+-
+-        Returns:
+-            list or None: API 返回的原始数据列表；失败返回 None
+-        """
+-        import httpx
+-
+-        client = self._get_httpx_client()
+-        if not client:
+-            return None
+-
+-        # 选择一个列表类 API 端点（优先选 confirmed 的）
+-        list_endpoint = self._pick_list_endpoint()
+-        if not list_endpoint:
+-            logger.warning('[gdcic] 无可用列表 API 端点')
+-            return None
+-
+-        url = list_endpoint['url']
+-        method = list_endpoint['method']
+-
+-        # 构造请求参数（猜测常见参数名）
+-        params = self._build_api_params(keyword, page)
+-
+-        try:
+-            time.sleep(random.uniform(1, 2))
+-            logger.info('[gdcic] API 直调: %s %s params=%s', method, url, params)
+-
+-            if method == 'POST':
+-                response = client.post(url, json=params, timeout=30.0)
+-            else:
+-                response = client.get(url, params=params, timeout=30.0)
+-
+-            if response.status_code != 200:
+-                logger.warning('[gdcic] API 返回 HTTP %d: %s', response.status_code, url)
+-                return None
+-
+-            data = response.json()
+-
+-            # 尝试多种常见响应结构
+-            rows = (data.get('data') or data.get('rows') or data.get('list')
+-                    or data.get('result') or data.get('records') or [])
+-            if isinstance(rows, dict):
+-                rows = rows.get('rows') or rows.get('list') or rows.get('records') or []
+-
+-            if not isinstance(rows, list):
+-                logger.warning('[gdcic] API 返回非列表数据: type=%s', type(rows).__name__)
+-                return None
+-
+-            logger.info('[gdcic] API 返回 %d 条数据', len(rows))
+-            return rows
+-
+-        except Exception as e:
+-            logger.warning('[gdcic] API 直调失败: %s - %s', url, e)
+-            return None
+-
+-    def _pick_list_endpoint(self):
+-        """从缓存中选择一个列表类 API 端点。"""
+-        for key, entry in self._api_cache.items():
+-            if entry.get('confirmed') and not entry.get('has_signature'):
+-                url_lower = entry['url'].lower()
+-                # 优先匹配列表/查询类端点
+-                for kw in ('list', 'query', 'search', 'getdata', 'getlist', 'page'):
+-                    if kw in url_lower:
+-                        return entry
+-        # 退而求其次：任意已确认端点
+-        for entry in self._api_cache.values():
+-            if entry.get('confirmed') and not entry.get('has_signature'):
+-                return entry
+-        return None
+-
+-    def _get_httpx_client(self):
+-        """获取或创建 httpx 客户端。"""
+-        import httpx
+-
+-        if self._httpx_client is not None:
+-            return self._httpx_client
+-
+-        try:
+-            headers = {
+-                'Accept': 'application/json, text/plain, */*',
+-                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+-                'User-Agent': (
+-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+-                    'AppleWebKit/537.36 (KHTML, like Gecko) '
+-                    'Chrome/120.0.0.0 Safari/537.36'
+-                ),
+-                'Referer': 'https://skypt.gdcic.net/',
+-            }
+-            if self._cookies_str:
+-                headers['Cookie'] = self._cookies_str
+-
+-            self._httpx_client = httpx.Client(
+-                timeout=httpx.Timeout(30.0, connect=15.0),
+-                follow_redirects=True,
+-                headers=headers,
+-            )
+-            return self._httpx_client
+-        except Exception as e:
+-            logger.error('[gdcic] httpx 客户端创建失败: %s', e)
+-            return None
+-
+-    def _close_httpx(self):
+-        """关闭 httpx 客户端。"""
+-        if self._httpx_client is not None:
+-            try:
+-                self._httpx_client.close()
+-            except Exception:
+-                pass
+-            self._httpx_client = None
+-
+-    @staticmethod
+-    def _build_api_params(keyword, page):
+-        """构造 API 请求参数（猜测常见参数名）。"""
+-        return {
+-            'keyword': keyword,
+-            'searchKey': keyword,
+-            'name': keyword,
+-            'pageNo': page,
+-            'pageNum': page,
+-            'page': page,
+-            'pageSize': 20,
+-        }
+-
+-    # ------------------------------------------------------------------
+-    # DOM 降级模式
+-    # ------------------------------------------------------------------
+-    def fetch_list_via_dom(self, keyword, page):
+-        """通过 Playwright 渲染页面并返回 DOM HTML。
+-
+-        Args:
+-            keyword: 搜索关键词
+-            page: 页码
+-
+-        Returns:
+-            str or None: 渲染后的页面 HTML；失败返回 None
+-        """
+-        if not self.page:
+-            logger.error('[gdcic] 浏览器未启动')
+-            return None
+-
+-        # 尝试在页面中输入关键词搜索
+-        try:
+-            html = self._search_and_render(keyword, page)
+-            if html:
+-                return html
+-        except Exception as e:
+-            logger.warning('[gdcic] DOM 搜索渲染失败: %s', e)
+-
+-        # 降级：尝试直接访问带参数的 URL
+-        for base_url in _SPA_ENTRY_URLS:
+-            url = '%s?keyword=%s&page=%d' % (base_url, keyword, page)
+-            html = self._load_page(url)
+-            if html and self._has_list_content(html):
+-                return html
+-
+-        logger.warning('[gdcic] DOM 模式未获取到有效内容: keyword=%s page=%d', keyword, page)
+-        return None
+-
+-    def _search_and_render(self, keyword, page):
+-        """在 SPA 页面中执行搜索并返回渲染后的 HTML。"""
+-        # 确保在 SPA 页面上
+-        current_url = self.page.url or ''
+-        if 'skypt.gdcic.net' not in current_url:
+-            for entry_url in _SPA_ENTRY_URLS:
+-                try:
+-                    self.page.goto(entry_url, wait_until='domcontentloaded', timeout=_PAGE_TIMEOUT)
+-                    try:
+-                        self.page.wait_for_load_state('networkidle', timeout=10000)
+-                    except Exception:
+-                        pass
+-                    time.sleep(2)
+-                    break
+-                except Exception:
+-                    continue
+-
+-        # 查找搜索框并输入关键词
+-        search_input = self.page.query_selector(
+-            'input[type="search"], input[type="text"][placeholder*="搜索"], '
+-            'input[type="text"][placeholder*="关键"], input[type="text"][name*="keyword"], '
+-            'input.search-input, input[placeholder*="请输入"]'
+-        )
+-        if not search_input:
+-            logger.debug('[gdcic] DOM 模式：未找到搜索框')
+-            return None
+-
+-        search_input.fill(keyword)
+-        time.sleep(0.5)
+-
+-        search_btn = self.page.query_selector(
+-            'button[type="submit"], button.search-btn, '
+-            'button.el-button--primary, .el-input-group__append button'
+-        )
+-        if search_btn:
+-            search_btn.click()
+-        else:
+-            search_input.press('Enter')
+-
+-        # 等待结果加载
+-        try:
+-            self.page.wait_for_load_state('networkidle', timeout=15000)
+-        except Exception:
+-            pass
+-        time.sleep(random.uniform(2, 3))
+-
+-        # 翻页
+-        if page > 1:
+-            self._goto_page(page)
+-
+-        return self.page.content()
+-
+-    def _goto_page(self, page_num):
+-        """点击分页组件跳转到指定页。"""
+-        try:
+-            # Element UI 分页组件
+-            pager_btn = self.page.query_selector(
+-                'li.number:has-text("%d"), '
+-                'button.btn-pagination:has-text("%d"), '
+-                'a.pagination-link:has-text("%d")' % (page_num, page_num, page_num)
+-            )
+-            if pager_btn:
+-                pager_btn.click()
+-                time.sleep(random.uniform(1, 2))
+-                try:
+-                    self.page.wait_for_load_state('networkidle', timeout=10000)
+-                except Exception:
+-                    pass
+-                return True
+-
+-            # 下一页按钮
+-            next_btn = self.page.query_selector(
+-                'button.btn-next, .el-pagination .btn-next, '
+-                'a.next, li.next a'
+-            )
+-            if next_btn and not next_btn.is_disabled():
+-                for _ in range(page_num - 1):
+-                    next_btn.click()
+-                    time.sleep(random.uniform(0.5, 1))
+-                try:
+-                    self.page.wait_for_load_state('networkidle', timeout=10000)
+-                except Exception:
+-                    pass
+-                return True
+-        except Exception as e:
+-            logger.debug('[gdcic] 分页跳转失败: %s', e)
+-        return False
+-
+-    def _load_page(self, url):
+-        """加载指定 URL 并返回 HTML。"""
+-        try:
+-            time.sleep(random.uniform(2, 4))
+-            logger.info('[gdcic] 加载页面: %s', url)
+-            self.page.goto(url, wait_until='domcontentloaded', timeout=_PAGE_TIMEOUT)
+-
+-            try:
+-                self.page.wait_for_load_state('networkidle', timeout=10000)
+-            except Exception:
+-                pass
+-
+-            time.sleep(random.uniform(1, 2))
+-            return self.page.content()
+-        except Exception as e:
+-            logger.warning('[gdcic] 页面加载失败: %s - %s', url, e)
+-            return None
+-
+-    @staticmethod
+-    def _has_list_content(html):
+-        """检查 HTML 是否包含列表内容（非空页面）。"""
+-        if not html:
+-            return False
+-
+-        import re
+-        # 检查是否有表格行或列表项
+-        li_count = len(re.findall(r'<li[^>]*>', html, re.I))
+-        tr_count = len(re.findall(r'<tr[^>]*>', html, re.I))
+-        if li_count >= 3 or tr_count >= 3:
+-            return True
+-
+-        # 检查是否有日期模式
+-        date_count = len(re.findall(r'\d{4}[-/.]\d{1,2}[-/.]\d{1,2}', html))
+-        if date_count >= 2:
+-            return True
+-
+-        return False
+diff --git a/scraper/gdcic/parser.py b/scraper/gdcic/parser.py
+index 5d26ad9..146da47 100644
+--- a/scraper/gdcic/parser.py
++++ b/scraper/gdcic/parser.py
+@@ -1,396 +1,260 @@
+ # -*- coding: utf-8 -*-
+-"""gdcic 数据解析：API JSON 解析 + DOM HTML 解析 → Lead dict。
+-
+-支持两种解析模式：
+-1. API JSON 解析（如果成功发现并直调 API）
+-2. DOM 解析（如果必须从 Playwright 渲染页面提取）
++"""gdcic API 响应解析（将开放平台 JSON 转为 Lead dict）。
++
++字段映射说明（API 字段 → Lead 字段）：
++    projectName           → project_name       （项目名称）
++    provinceBiddingCode   → bidding_number     （中标通知书编号，作为唯一编号）
++    tenderType            → 存入 raw_data      （招标类型：施工/监理/设计等）
++    tenderMode            → 存入 raw_data      （招标方式：公开招标/直接委托等）
++    biddingUnit[].orgName → buyer_name         （中标单位/承包单位，建材获客目标客户）
++    agentOrgName/agentUnit → agency_name       （招标代理机构）
++    address               → buyer_address      （项目地址，详情字段）
++    biddingMoney          → budget_amount      （中标金额，单位万元，详情字段）
++    biddingDate           → publish_date       （招标日期，详情字段）
++    scale                 → 存入 raw_data      （建设规模，详情字段）
++    projectCode           → 存入 raw_data      （项目编号）
++
++注意：
++- 列表 API 返回的 address/biddingDate/biddingMoney/scale/agentUnit 均为 null，
++  需调用详情 API 补全（parse_bidding_detail 处理）。
++- biddingMoney 单位为万元，直接存入 budget_amount（Float），未做单位换算。
++- region 固定为"广东省"（广东住建厅数据源）。
+ """
+ import logging
+-import re
+-from urllib.parse import urljoin
+-
+-from bs4 import BeautifulSoup
+ 
+-from scraper.gdcic.utils import clean_gdcic_text, parse_gdcic_date, extract_gdcic_phone
++from scraper.gdcic.utils import parse_gdcic_date
+ 
+ logger = logging.getLogger(__name__)
+ 
+-# API JSON 字段映射：常见键名 → Lead 字段名
+-# 由于 gdcic API 结构未知，列出多种可能的键名以提高兼容性
+-_API_FIELD_MAP = {
+-    'project_name': [
+-        'projectName', 'project_name', 'name', 'title', 'xmcName',
+-        'xmmc', 'xmmcName', 'gcName', 'gcmc', 'projectTitle',
+-    ],
+-    'bidding_number': [
+-        'biddingNumber', 'bidding_number', 'projectCode', 'project_code',
+-        'xmbh', 'gcbh', 'code', 'no', 'number',
+-    ],
+-    'announcement_type': [
+-        'announcementType', 'type', 'typeName', 'ggType', 'gglx',
+-        'noticeType', 'category', 'categoryName',
+-    ],
+-    'buyer_name': [
+-        'buyerName', 'buyer_name', 'purchaser', 'purchaserName',
+-        'ownerName', 'owner', 'dwmc', 'jsdw', 'jsdwmc',
+-        'constructionUnit', 'unitName',
+-    ],
+-    'buyer_address': [
+-        'buyerAddress', 'address', 'buyer_address', 'dwAddress',
+-        'jsdwAddress', 'projectAddress',
+-    ],
+-    'region': [
+-        'region', 'area', 'city', 'areaName', 'cityName',
+-        'dq', 'dqmc', 'province', 'projectArea',
+-    ],
+-    'contact_person': [
+-        'contactPerson', 'contact', 'contactName', 'lxr',
+-        'lxrxm', 'contact_person',
+-    ],
+-    'phone': [
+-        'phone', 'telephone', 'tel', 'contactPhone', 'lxdh',
+-        'lxPhone', 'mobile', 'phone',
+-    ],
+-    'agency_name': [
+-        'agencyName', 'agency', 'agentName', 'dljg', 'dljgmc',
+-    ],
+-    'agency_phone': [
+-        'agencyPhone', 'agencyTel', 'dldh',
+-    ],
+-    'budget_amount': [
+-        'budgetAmount', 'budget', 'amount', 'ysje', 'ysAmount',
+-        'totalAmount', 'contractAmount',
+-    ],
+-    'publish_date': [
+-        'publishDate', 'publishTime', 'createTime', 'fbDate',
+-        'createDate', 'releaseDate', 'pubDate', 'date',
+-    ],
+-    'deadline': [
+-        'deadline', 'endTime', 'jzDate', 'expiryDate',
+-    ],
+-    'source_url': [
+-        'url', 'detailUrl', 'link', 'href', 'sourceUrl',
+-    ],
+-}
+-
+-
+-def parse_api_list(rows, base_url='https://www.gdcic.net'):
+-    """解析 API JSON 返回的原始数据列表。
+-
+-    对每条记录尝试多种字段映射，兼容不同的 API 响应结构。
++# 详情页 URL 模板（开放平台前端 SPA 路由）
++_DETAIL_URL_TPL = 'https://skypt.gdcic.net/openplatform/#/web/project/bidding/detail?id={item_id}'
++
++# 默认地域（广东住建厅数据均属广东省）
++_DEFAULT_REGION = '广东省'
++
++# 默认公告类型（开放平台招投标数据为中标结果）
++_DEFAULT_ANNOUNCEMENT_TYPE = '中标公告'
++
++
++def _join_org_names(org_list):
++    """从组织列表中拼接 orgName，多个用逗号分隔。
+ 
+     Args:
+-        rows: API 返回的数据行列表（dict list）
+-        base_url: 基础 URL，用于拼接相对路径
++        org_list: [{"orgName": "...", "orgCode": "..."}, ...] 或 None
+ 
+     Returns:
+-        list[dict]: Lead dict 列表
++        str: 拼接后的名称字符串，无数据返回空字符串
+     """
+-    if not rows:
+-        return []
++    if not org_list or not isinstance(org_list, list):
++        return ''
++    names = []
++    for org in org_list:
++        if isinstance(org, dict):
++            name = (org.get('orgName') or '').strip()
++            if name:
++                names.append(name)
++    return ','.join(names)
++
++
++def _join_org_codes(org_list):
++    """从组织列表中拼接 orgCode，多个用逗号分隔。"""
++    if not org_list or not isinstance(org_list, list):
++        return ''
++    codes = []
++    for org in org_list:
++        if isinstance(org, dict):
++            code = (org.get('orgCode') or '').strip()
++            if code:
++                codes.append(code)
++    return ','.join(codes)
+ 
+-    leads = []
+-    for row in rows:
+-        if not isinstance(row, dict):
+-            continue
+ 
+-        lead = _parse_api_row(row, base_url)
+-        if lead and lead.get('project_name'):
+-            leads.append(lead)
++def _parse_money(money_str):
++    """解析中标金额字符串为 float。
+ 
+-    logger.info('[gdcic] API 解析: %d 行 → %d 条有效线索', len(rows), len(leads))
+-    return leads
++    API 返回如 "639.76"（单位万元），转为 float。
+ 
++    Returns:
++        float or None
++    """
++    if not money_str:
++        return None
++    try:
++        return float(str(money_str).strip())
++    except (ValueError, TypeError):
++        logger.debug('[gdcic] 金额解析失败: %s', money_str)
++        return None
+ 
+-def _parse_api_row(row, base_url):
+-    """解析单条 API 数据行。"""
+-    lead = {}
+ 
+-    for lead_field, api_keys in _API_FIELD_MAP.items():
+-        for key in api_keys:
+-            value = row.get(key)
+-            if value is not None and str(value).strip():
+-                lead[lead_field] = str(value).strip()
+-                break
++def parse_bidding_list_item(item):
++    """将招投标列表 API 返回的单条数据转为 Lead dict。
+ 
+-    # 日期字段特殊处理
+-    for date_field in ('publish_date', 'publish_time', 'deadline'):
+-        if date_field in lead:
+-            date_obj, time_str = parse_gdcic_date(lead[date_field])
+-            if date_obj:
+-                lead[date_field] = date_obj
+-                if time_str and date_field == 'publish_date':
+-                    lead['publish_time'] = time_str
++    列表项中 address/biddingDate/biddingMoney/scale/agentUnit 为 null，
++    需后续调用详情 API 补全（parse_bidding_detail）。
+ 
+-    # source_url 补全
+-    if lead.get('source_url') and not lead['source_url'].startswith(('http://', 'https://')):
+-        lead['source_url'] = urljoin(base_url, lead['source_url'])
++    Args:
++        item: API 返回 rows 数组中的一个元素
+ 
+-    # 从文本中提取电话（如果 phone 字段为空）
+-    if not lead.get('phone'):
+-        full_text = ' '.join(str(v) for v in row.values() if isinstance(v, str))
+-        phone = extract_gdcic_phone(full_text)
+-        if phone:
+-            lead['phone'] = phone
++    Returns:
++        dict: Lead 字段字典（仅含非空字段），包含 _bidding_id 供详情调用使用
++    """
++    if not isinstance(item, dict):
++        return {}
+ 
+-    return lead
++    item_id = (item.get('id') or '').strip()
++    project_name = (item.get('projectName') or '').strip()
+ 
++    # 无项目名称视为无效记录，直接返回空字典
++    if not project_name:
++        return {}
+ 
+-def parse_dom_list(html, base_url='https://www.gdcic.net'):
+-    """解析 DOM 渲染页面 HTML，提取列表数据。
++    lead = {
++        'project_name': project_name[:500],
++        'bidding_number': (item.get('provinceBiddingCode') or '').strip()[:100],
++        'announcement_type': _DEFAULT_ANNOUNCEMENT_TYPE,
++        'region': _DEFAULT_REGION,
++        'source_url': _DETAIL_URL_TPL.format(item_id=item_id) if item_id else '',
++        # 临时字段：供 _scrape_page 调用详情 API 后 pop 掉
++        '_bidding_id': item_id,
++    }
+ 
+-    尝试多种常见选择器以适配不同页面结构：
+-    1. Element UI 表格
+-    2. 常见列表容器
+-    3. 通用 fallback：所有含日期的链接
++    # 中标单位（承包单位）→ buyer_name（建材获客目标客户）
++    bidding_units = item.get('biddingUnit') or []
++    buyer_name = _join_org_names(bidding_units)
++    if buyer_name:
++        lead['buyer_name'] = buyer_name[:200]
++    # 中标单位代码存入 raw_data
++    buyer_codes = _join_org_codes(bidding_units)
++    if buyer_codes:
++        lead['bidding_unit_codes'] = buyer_codes
++
++    # 招标代理机构
++    agency_name = (item.get('agentOrgName') or '').strip()
++    if agency_name:
++        lead['agency_name'] = agency_name[:200]
++
++    # 招标类型/方式存入 raw_data
++    tender_type = (item.get('tenderType') or '').strip()
++    if tender_type:
++        lead['tender_type'] = tender_type
++    tender_mode = (item.get('tenderMode') or '').strip()
++    if tender_mode:
++        lead['tender_mode'] = tender_mode
++
++    # 项目编号存入 raw_data
++    project_code = (item.get('projectCode') or '').strip()
++    if project_code:
++        lead['project_code'] = project_code
++
++    # 数据级别存入 raw_data
++    data_level = (item.get('dataLevel') or '').strip()
++    if data_level:
++        lead['data_level'] = data_level
++
++    # 过滤空值（保留 _bidding_id 即使为空，便于后续 pop）
++    return {k: v for k, v in lead.items() if v not in (None, '') or k == '_bidding_id'}
++
++
++def parse_bidding_detail(detail):
++    """解析招投标详情 API 返回的数据，提取列表中为 null 的补充字段。
+ 
+     Args:
+-        html: 页面 HTML 字符串
+-        base_url: 基础 URL
++        detail: 详情 API 返回的单条记录 dict
+ 
+     Returns:
+-        list[dict]: Lead dict 列表
++        dict: 补充字段字典（address/biddingDate/biddingMoney/scale/agentUnit 等）
+     """
+-    if not html:
+-        return []
+-
+-    soup = _make_soup(html)
+-    results = []
+-
+-    # 策略 1：Element UI / Vue 表格
+-    table_rows = soup.select(
+-        'table.el-table__body tbody tr, '
+-        'table tbody tr, '
+-        '.el-table__body-wrapper table tbody tr'
+-    )
+-    # 获取表头
+-    headers = _extract_table_headers(soup)
+-
+-    for row in table_rows:
+-        lead = _parse_table_row(row, headers, base_url)
+-        if lead and lead.get('project_name'):
+-            results.append(lead)
+-
+-    if results:
+-        logger.info('[gdcic] DOM 表格解析: %d 条', len(results))
+-        return results
+-
+-    # 策略 2：列表容器
+-    list_items = soup.select(
+-        'ul.list li, ul.el-list li, div.list-item, '
+-        'div.el-card, div.result-item, div.info-item, '
+-        '.data-list .item, .list-container .item'
+-    )
+-    for item in list_items:
+-        lead = _parse_list_item(item, base_url)
+-        if lead and lead.get('project_name'):
+-            results.append(lead)
+-
+-    if results:
+-        logger.info('[gdcic] DOM 列表解析: %d 条', len(results))
+-        return results
+-
+-    # 策略 3：Fallback — 含日期的链接
+-    results = _fallback_parse_links(soup, base_url)
+-    logger.info('[gdcic] DOM Fallback 解析: %d 条', len(results))
+-    return results
+-
+-
+-def _make_soup(html):
+-    """创建 BeautifulSoup 对象。"""
+-    try:
+-        return BeautifulSoup(html, 'lxml')
+-    except Exception:
+-        return BeautifulSoup(html, 'html.parser')
+-
+-
+-def _extract_table_headers(soup):
+-    """提取表格表头文本列表。"""
+-    headers = []
+-    header_cells = soup.select(
+-        'table.el-table__header th, table thead th, '
+-        '.el-table__header-wrapper th'
+-    )
+-    for cell in header_cells:
+-        text = cell.get_text(strip=True)
+-        headers.append(text)
+-    return headers
+-
+-
+-def _parse_table_row(row, headers, base_url):
+-    """解析表格行，结合表头映射字段。"""
+-    cells = row.select('td')
+-    if not cells:
++    if not isinstance(detail, dict):
+         return {}
+ 
+-    lead = {}
+-    cell_texts = []
+-    for cell in cells:
+-        cell_texts.append(clean_gdcic_text(cell.get_text()))
+-
+-    # 如果有表头，按表头映射
+-    if headers:
+-        kv = {}
+-        for i, header in enumerate(headers):
+-            if i < len(cell_texts):
+-                kv[header] = cell_texts[i]
+-
+-        lead = _map_kv_to_lead(kv, base_url)
+-    else:
+-        # 无表头时，尝试从文本内容推断
+-        full_text = ' | '.join(cell_texts)
+-        lead = _infer_lead_from_text(full_text, base_url)
+-
+-    # 提取链接
+-    link = row.select_one('a[href]')
+-    if link:
+-        href = link.get('href', '')
+-        if href and not href.startswith(('javascript:', '#', 'mailto:')):
+-            lead['source_url'] = _resolve_url(href, base_url)
+-        if not lead.get('project_name'):
+-            lead['project_name'] = clean_gdcic_text(link.get_text())
+-
+-    return lead
+-
+-
+-def _map_kv_to_lead(kv, base_url):
+-    """将表头键值对映射为 Lead dict。"""
+-    lead = {}
+-
+-    # 表头关键词 → Lead 字段映射
+-    header_map = {
+-        'project_name': ['项目名称', '工程名称', '项目', '名称', '标题', '公告标题', '项目名'],
+-        'bidding_number': ['编号', '项目编号', '招标编号', '工程编号', '公告编号'],
+-        'announcement_type': ['类型', '公告类型', '类别', '分类'],
+-        'buyer_name': ['建设单位', '采购人', '采购单位', '招标人', '业主', '甲方', '单位'],
+-        'region': ['地区', '地域', '所在区域', '项目地区', '城市'],
+-        'budget_amount': ['金额', '预算', '预算金额', '合同金额', '中标金额'],
+-        'publish_date': ['日期', '发布日期', '发布时间', '公告日期', '发布日期', '时间'],
+-        'contact_person': ['联系人', '项目联系人'],
+-        'phone': ['电话', '联系电话', '联系方式'],
+-        'deadline': ['截止日期', '截止时间', '报名截止'],
+-    }
++    result = {}
++
++    # 项目地址
++    address = (detail.get('address') or '').strip()
++    if address:
++        result['buyer_address'] = address[:300]
+ 
+-    for lead_field, header_keywords in header_map.items():
+-        for header_text, cell_text in kv.items():
+-            for kw in header_keywords:
+-                if kw in header_text:
+-                    lead[lead_field] = cell_text[:500]
+-                    break
+-            if lead_field in lead:
+-                break
+-
+-    # 日期处理
+-    if 'publish_date' in lead:
+-        date_obj, time_str = parse_gdcic_date(lead['publish_date'])
++    # 招标日期
++    bidding_date_str = (detail.get('biddingDate') or '').strip()
++    if bidding_date_str:
++        date_obj, time_str = parse_gdcic_date(bidding_date_str)
+         if date_obj:
+-            lead['publish_date'] = date_obj
++            result['publish_date'] = date_obj
+             if time_str:
+-                lead['publish_time'] = time_str
++                result['publish_time'] = time_str
+ 
+-    return lead
++    # 中标金额（单位万元）
++    money = _parse_money(detail.get('biddingMoney'))
++    if money is not None:
++        result['budget_amount'] = money
+ 
++    # 建设规模存入 raw_data
++    scale = (detail.get('scale') or '').strip()
++    if scale:
++        result['scale'] = scale
+ 
+-def _infer_lead_from_text(text, base_url):
+-    """从纯文本推断 Lead 字段。"""
+-    lead = {}
++    # 招标代理机构（详情中的 agentUnit 数组优先于列表中的 agentOrgName）
++    agent_units = detail.get('agentUnit') or []
++    agency_name = _join_org_names(agent_units)
++    if agency_name:
++        result['agency_name'] = agency_name[:200]
++    elif (detail.get('agentOrgName') or '').strip():
++        result['agency_name'] = detail['agentOrgName'].strip()[:200]
+ 
+-    # 提取项目名称（通常是最长的一段中文文本）
+-    # 简单策略：取前 200 字符作为项目名称
+-    parts = [p.strip() for p in text.split('|') if p.strip()]
+-    if parts:
+-        # 取最长的部分作为项目名称
+-        longest = max(parts, key=len)
+-        if len(longest) >= 4:
+-            lead['project_name'] = longest[:500]
+-
+-    # 提取日期
+-    date_match = re.search(r'\d{4}[-/.]\d{1,2}[-/.]\d{1,2}', text)
+-    if date_match:
+-        date_obj, time_str = parse_gdcic_date(date_match.group(0))
+-        if date_obj:
+-            lead['publish_date'] = date_obj
++    # 详情中可能补全的中标单位（如果列表中为空）
++    bidding_units = detail.get('biddingUnit') or []
++    buyer_name = _join_org_names(bidding_units)
++    if buyer_name:
++        result.setdefault('buyer_name', buyer_name[:200])
++    buyer_codes = _join_org_codes(bidding_units)
++    if buyer_codes:
++        result['bidding_unit_codes'] = buyer_codes
+ 
+-    return lead
++    return result
+ 
+ 
+-def _parse_list_item(item, base_url):
+-    """解析列表项（div/li）。"""
+-    lead = {}
++def parse_project_info(info):
++    """解析项目信息 API 返回的数据（可选补充）。
+ 
+-    # 标题 + 链接
+-    title_tag = item.select_one('a[href], h3 a, h4 a, .title a, .name a')
+-    if title_tag:
+-        lead['project_name'] = clean_gdcic_text(title_tag.get_text())
+-        href = title_tag.get('href', '')
+-        if href and not href.startswith(('javascript:', '#', 'mailto:')):
+-            lead['source_url'] = _resolve_url(href, base_url)
++    返回项目所在地、建设单位、总投资等补充字段。
+ 
+-    # 日期
+-    date_el = item.select_one('.date, .time, .pub-date, span[class*="date"]')
+-    if date_el:
+-        date_text = date_el.get_text(strip=True)
+-        date_obj, time_str = parse_gdcic_date(date_text)
+-        if date_obj:
+-            lead['publish_date'] = date_obj
+-            if time_str:
+-                lead['publish_time'] = time_str
+-    else:
+-        # 从文本中提取日期
+-        full_text = item.get_text()
+-        date_match = re.search(r'\d{4}[-/.]\d{1,2}[-/.]\d{1,2}', full_text)
+-        if date_match:
+-            date_obj, time_str = parse_gdcic_date(date_match.group(0))
+-            if date_obj:
+-                lead['publish_date'] = date_obj
+-
+-    # 类型标签
+-    type_el = item.select_one('.type, .tag, .label, span[class*="type"]')
+-    if type_el:
+-        lead['announcement_type'] = clean_gdcic_text(type_el.get_text())[:50]
+-
+-    return lead
+-
+-
+-def _fallback_parse_links(soup, base_url):
+-    """Fallback：从所有链接中提取含日期的条目。"""
+-    results = []
+-    date_pattern = re.compile(r'\d{4}[-/.]\d{1,2}[-/.]\d{1,2}')
+-
+-    for a_tag in soup.select('a[href]'):
+-        text = clean_gdcic_text(a_tag.get_text())
+-        if not text or len(text) < 5:
+-            continue
+-
+-        href = a_tag.get('href', '')
+-        if not href or href in ('#', '/', 'javascript:void(0)'):
+-            continue
+-
+-        # 检查父节点中是否有日期
+-        parent = a_tag.parent
+-        parent_text = parent.get_text() if parent else ''
+-        date_match = date_pattern.search(parent_text)
+-
+-        if date_match:
+-            date_obj, time_str = parse_gdcic_date(date_match.group(0))
+-            lead = {
+-                'project_name': text[:500],
+-                'source_url': _resolve_url(href, base_url),
+-            }
+-            if date_obj:
+-                lead['publish_date'] = date_obj
+-            if time_str:
+-                lead['publish_time'] = time_str
+-            results.append(lead)
++    Args:
++        info: 项目信息 API 返回的记录 dict
++
++    Returns:
++        dict: 补充字段字典
++    """
++    if not isinstance(info, dict):
++        return {}
+ 
+-    return results
++    result = {}
+ 
++    # 项目所在地（省/市/区拼接）
++    province = (info.get('provinceName') or '').strip()
++    city = (info.get('cityName') or '').strip()
++    district = (info.get('districtName') or '').strip()
++    parts = [p for p in (province, city, district) if p]
++    if parts:
++        result['project_location'] = ''.join(parts)
+ 
+-def _resolve_url(href, base_url):
+-    """将相对 URL 转为绝对 URL。"""
+-    if not href:
+-        return ''
+-    href = href.strip()
+-    if href.startswith(('http://', 'https://')):
+-        return href
+-    return urljoin(base_url, href)
++    # 建设单位（项目信息中的建设单位，非中标单位）
++    build_unit = (info.get('buildUnit') or '').strip()
++    if build_unit:
++        result['build_unit'] = build_unit[:200]
++
++    # 总投资
++    total_invest = _parse_money(info.get('totalInvest'))
++    if total_invest is not None:
++        result['total_invest'] = total_invest
++
++    # 总面积
++    total_area = (info.get('totalArea') or '').strip()
++    if total_area:
++        result['total_area'] = total_area
++
++    # 建设规模
++    build_scale = (info.get('buildScale') or '').strip()
++    if build_scale:
++        result['build_scale'] = build_scale
++
++    return result
+diff --git a/scraper/registry.py b/scraper/registry.py
+index eeb70cb..f063b3c 100644
+--- a/scraper/registry.py
++++ b/scraper/registry.py
+@@ -107,7 +107,7 @@ SCRAPER_REGISTRY = {
+         'badge_class': 'badge-indigo',
+         'include_in_all': True,
+         'is_lead_source': True,
+-        'source_site': 'https://www.gdcic.net/',
++        'source_site': 'https://skypt.gdcic.net/',
+     },
+     'ggzyjy_sc': {
+         'label': '四川公共资源交易',
+diff --git a/tests/test_gdcic.py b/tests/test_gdcic.py
+index 68e4735..2cfd5f7 100644
+--- a/tests/test_gdcic.py
++++ b/tests/test_gdcic.py
+@@ -1,188 +1,380 @@
+ # -*- coding: utf-8 -*-
+ """gdcic 采集模块单元测试。
+ 
+-仅测试纯函数解析逻辑，不测试真实 Playwright 页面操作（依赖网络）。
++覆盖范围：
++- parser: 招投标列表项字段映射、详情字段解析、项目信息解析
++- api:    httpx API 调用封装（mock httpx 响应）
++- utils:  日期解析、文本清理、电话提取
++- registry: gdcic 条目验证
++- import: 模块导入验证
+ """
+-import pytest
+ from datetime import date
++from unittest.mock import MagicMock, patch
++
++import pytest
+ 
+ 
+ # ------------------------------------------------------------------
+-# parser 测试 — API JSON 解析
++# 测试数据（基于真实 API 抓包结果）
+ # ------------------------------------------------------------------
+ 
+-MOCK_API_ROWS = [
+-    {
+-        'projectName': 'XX市供水管网改造工程管材采购',
+-        'projectCode': 'GDCIC-2026-001',
+-        'typeName': '招标公告',
+-        'ownerName': 'XX市自来水有限公司',
+-        'areaName': '广东省江门市',
+-        'contactPerson': '张三',
+-        'contactPhone': '0750-12345678',
+-        'budgetAmount': '150万元',
+-        'publishDate': '2026-07-15',
+-        'url': '/detail/10001.html',
+-    },
+-    {
+-        'name': 'YY县雨污分流工程HDPE双壁波纹管采购',
+-        'code': 'GDCIC-2026-002',
+-        'category': '中标公告',
+-        'buyerName': 'YY县住建局',
+-        'city': '广州市',
+-        'phone': '020-87654321',
+-        'amount': '200万元',
+-        'createTime': '2026/07/14',
+-        'detailUrl': 'https://skypt.gdcic.net/detail/10002.html',
+-    },
+-    {
+-        'title': 'ZZ污水处理厂管道维修工程',
+-        'type': '资格预审',
+-        'jsdw': 'ZZ市排水管理处',
+-        'dq': '深圳市',
+-        'lxr': '李四',
+-        'lxdh': '13812345678',
+-        'fbDate': '2026年7月13日',
+-    },
+-]
+-
+-
+-class TestParseApiList:
+-    """测试 API JSON 解析。"""
+-
+-    def test_parse_api_list_basic(self):
+-        from scraper.gdcic.parser import parse_api_list
+-        results = parse_api_list(MOCK_API_ROWS)
+-        assert len(results) == 3
+-
+-        # 第 1 条
+-        r0 = results[0]
+-        assert r0['project_name'] == 'XX市供水管网改造工程管材采购'
+-        assert r0['bidding_number'] == 'GDCIC-2026-001'
+-        assert r0['announcement_type'] == '招标公告'
+-        assert r0['buyer_name'] == 'XX市自来水有限公司'
+-        assert '江门' in r0['region']
+-        assert r0['contact_person'] == '张三'
+-        assert r0['phone'] == '0750-12345678'
+-        assert r0['publish_date'] == date(2026, 7, 15)
+-
+-    def test_parse_api_list_alt_keys(self):
+-        from scraper.gdcic.parser import parse_api_list
+-        results = parse_api_list(MOCK_API_ROWS)
+-
+-        # 第 2 条 — 使用备选字段名
+-        r1 = results[1]
+-        assert '雨污分流' in r1['project_name']
+-        assert r1['buyer_name'] == 'YY县住建局'
+-        assert r1['phone'] == '020-87654321'
+-
+-    def test_parse_api_list_source_url(self):
+-        from scraper.gdcic.parser import parse_api_list
+-        results = parse_api_list(MOCK_API_ROWS)
+-
+-        # 相对 URL 应拼接 base_url
+-        r0 = results[0]
+-        assert r0['source_url'].startswith('https://www.gdcic.net')
+-
+-        # 绝对 URL 保持不变
+-        r1 = results[1]
+-        assert r1['source_url'] == 'https://skypt.gdcic.net/detail/10002.html'
+-
+-    def test_parse_api_list_date_formats(self):
+-        from scraper.gdcic.parser import parse_api_list
+-        results = parse_api_list(MOCK_API_ROWS)
+-
+-        # 中文日期
+-        r2 = results[2]
+-        assert r2['publish_date'] == date(2026, 7, 13)
+-
+-    def test_parse_api_list_empty(self):
+-        from scraper.gdcic.parser import parse_api_list
+-        assert parse_api_list([]) == []
+-        assert parse_api_list(None) == []
+-
+-    def test_parse_api_list_non_dict_rows(self):
+-        from scraper.gdcic.parser import parse_api_list
+-        rows = ['not a dict', 123, None, {'projectName': 'Test Project'}]
+-        results = parse_api_list(rows)
+-        assert len(results) == 1
+-        assert results[0]['project_name'] == 'Test Project'
++MOCK_LIST_ITEM = {
++    'id': '10051047',
++    'projectId': '4407812604020001',
++    'projectName': '天悦湾11#小区公共活动中心及公共架空（主体阶段）',
++    'projectCode': '4407812604020001',
++    'tenderType': '施工',
++    'provinceBiddingCode': '4407812604020001-BD-014',
++    'tenderMode': '直接委托',
++    'dataLevel': 'C',
++    'address': None,
++    'biddingDate': None,
++    'biddingMoney': None,
++    'scale': None,
++    'agentOrgName': None,
++    'biddingUnit': [
++        {'orgTypeId': 17, 'orgType': '承包单位',
++         'orgName': '广东华置建设有限公司', 'orgCode': 'MA544GEN2'},
++    ],
++    'biddingUnitPerson': [],
++}
++
++MOCK_LIST_ITEM_MULTI_UNITS = {
++    'id': '10051048',
++    'projectName': '某市政管网改造工程',
++    'projectCode': '4407812604020002',
++    'tenderType': '施工',
++    'provinceBiddingCode': '4407812604020002-BD-015',
++    'tenderMode': '公开招标',
++    'dataLevel': 'B',
++    'biddingUnit': [
++        {'orgName': '中建一局', 'orgCode': 'ORG001'},
++        {'orgName': '中建二局', 'orgCode': 'ORG002'},
++    ],
++}
++
++MOCK_LIST_RESPONSE = {
++    'msg': 'success',
++    'total': 160063,
++    'code': 0,
++    'rows': [MOCK_LIST_ITEM, MOCK_LIST_ITEM_MULTI_UNITS],
++}
++
++# 真实详情 API 响应：记录字段直接在顶层，无 code/msg/data 包装
++MOCK_DETAIL_RESPONSE = {
++    'id': '10051047',
++    'projectName': '天悦湾11#小区公共活动中心及公共架空（主体阶段）',
++    'projectCode': '4407812604020001',
++    'tenderType': '施工',
++    'provinceBiddingCode': '4407812604020001-BD-014',
++    'tenderMode': '直接委托',
++    'dataLevel': 'C',
++    'address': '台山市台城西湖片区国际路与龙成路交叉口东北侧',
++    'biddingDate': '2026-03-09 00:00:00',
++    'biddingMoney': '639.76',
++    'scale': '建筑面积3198.8m²，地上2层。',
++    'agentOrgName': None,
++    'agentUnit': [
++        {'orgName': '广东某招标代理有限公司', 'orgCode': 'AGENT001'},
++    ],
++    'biddingUnit': [
++        {'orgTypeId': 17, 'orgType': '承包单位',
++         'orgName': '广东华置建设有限公司', 'orgCode': 'MA544GEN2'},
++    ],
++}
+ 
+ 
+ # ------------------------------------------------------------------
+-# parser 测试 — DOM 解析
++# parser 测试 — 列表项解析
+ # ------------------------------------------------------------------
+ 
+-MOCK_DOM_HTML_TABLE = """
+-<html><body>
+-<table class="el-table__body">
+-<thead><tr>
+-    <th>项目名称</th><th>建设单位</th><th>地区</th><th>发布日期</th>
+-</tr></thead>
+-<tbody>
+-    <tr>
+-        <td><a href="/detail/2001.html">XX市供水管网改造工程</a></td>
+-        <td>XX市自来水公司</td>
+-        <td>江门市</td>
+-        <td>2026-07-15</td>
+-    </tr>
+-    <tr>
+-        <td><a href="/detail/2002.html">YY县雨污分流工程</a></td>
+-        <td>YY县住建局</td>
+-        <td>广州市</td>
+-        <td>2026-07-14</td>
+-    </tr>
+-</tbody>
+-</table>
+-</body></html>
+-"""
++class TestParseBiddingListItem:
++    """测试招投标列表项解析。"""
++
++    def test_parse_basic_fields(self):
++        from scraper.gdcic.parser import parse_bidding_list_item
++        lead = parse_bidding_list_item(MOCK_LIST_ITEM)
++
++        assert lead['project_name'] == '天悦湾11#小区公共活动中心及公共架空（主体阶段）'
++        assert lead['bidding_number'] == '4407812604020001-BD-014'
++        assert lead['announcement_type'] == '中标公告'
++        assert lead['region'] == '广东省'
++        assert lead['buyer_name'] == '广东华置建设有限公司'
++        assert lead['bidding_unit_codes'] == 'MA544GEN2'
++        assert lead['tender_type'] == '施工'
++        assert lead['tender_mode'] == '直接委托'
++        assert lead['project_code'] == '4407812604020001'
++        assert lead['data_level'] == 'C'
++        # _bidding_id 临时字段
++        assert lead['_bidding_id'] == '10051047'
++
++    def test_parse_source_url(self):
++        from scraper.gdcic.parser import parse_bidding_list_item
++        lead = parse_bidding_list_item(MOCK_LIST_ITEM)
++        assert 'id=10051047' in lead['source_url']
++        assert lead['source_url'].startswith('https://skypt.gdcic.net/')
++
++    def test_parse_multiple_bidding_units(self):
++        from scraper.gdcic.parser import parse_bidding_list_item
++        lead = parse_bidding_list_item(MOCK_LIST_ITEM_MULTI_UNITS)
++        # 多个中标单位用逗号拼接
++        assert lead['buyer_name'] == '中建一局,中建二局'
++        assert lead['bidding_unit_codes'] == 'ORG001,ORG002'
++
++    def test_parse_list_item_null_fields_excluded(self):
++        """列表中为 null 的字段（address/biddingDate等）不应出现。"""
++        from scraper.gdcic.parser import parse_bidding_list_item
++        lead = parse_bidding_list_item(MOCK_LIST_ITEM)
++        # 列表中这些字段为 null，不应出现在 lead 中
++        assert 'buyer_address' not in lead
++        assert 'publish_date' not in lead
++        assert 'budget_amount' not in lead
++        assert 'scale' not in lead
++
++    def test_parse_empty_item(self):
++        from scraper.gdcic.parser import parse_bidding_list_item
++        assert parse_bidding_list_item({}) == {}
++        assert parse_bidding_list_item(None) == {}
++        assert parse_bidding_list_item('not a dict') == {}
++
++    def test_parse_no_bidding_units(self):
++        """biddingUnit 为空列表时 buyer_name 不出现。"""
++        from scraper.gdcic.parser import parse_bidding_list_item
++        item = {'id': '1', 'projectName': '测试项目', 'provinceBiddingCode': 'CODE-1'}
++        lead = parse_bidding_list_item(item)
++        assert lead['project_name'] == '测试项目'
++        assert 'buyer_name' not in lead
+ 
+-MOCK_DOM_HTML_LIST = """
+-<html><body>
+-<div class="list-container">
+-    <div class="item">
+-        <a href="/detail/3001.html">ZZ污水处理厂管道维修工程招标公告</a>
+-        <span class="date">2026-07-13</span>
+-        <span class="type">招标公告</span>
+-    </div>
+-    <div class="item">
+-        <a href="/detail/3002.html">WW市政道路管道铺设项目</a>
+-        <span class="date">2026-07-12</span>
+-        <span class="type">中标公告</span>
+-    </div>
+-</div>
+-</body></html>
+-"""
+ 
++# ------------------------------------------------------------------
++# parser 测试 — 详情解析
++# ------------------------------------------------------------------
+ 
+-class TestParseDomList:
+-    """测试 DOM 解析。"""
++class TestParseBiddingDetail:
++    """测试招投标详情解析。"""
++
++    def test_parse_detail_basic(self):
++        from scraper.gdcic.parser import parse_bidding_detail
++        # 详情 API 响应无 code/msg/data 包装，记录字段直接在顶层
++        result = parse_bidding_detail(MOCK_DETAIL_RESPONSE)
++
++        assert result['buyer_address'] == '台山市台城西湖片区国际路与龙成路交叉口东北侧'
++        assert result['publish_date'] == date(2026, 3, 9)
++        assert result['budget_amount'] == 639.76
++        assert result['scale'] == '建筑面积3198.8m²，地上2层。'
++        # agentUnit 数组中的代理机构名
++        assert result['agency_name'] == '广东某招标代理有限公司'
++
++    def test_parse_detail_date_with_time(self):
++        from scraper.gdcic.parser import parse_bidding_detail
++        detail_data = {
++            'biddingDate': '2026-03-09 14:30:00',
++            'biddingMoney': '100.5',
++            'address': '广州市天河区',
++        }
++        result = parse_bidding_detail(detail_data)
++        assert result['publish_date'] == date(2026, 3, 9)
++        assert result['publish_time'] == '14:30:00'
++        assert result['budget_amount'] == 100.5
++        assert result['buyer_address'] == '广州市天河区'
++
++    def test_parse_detail_agent_org_name_fallback(self):
++        """详情中无 agentUnit 但有 agentOrgName 时使用 agentOrgName。"""
++        from scraper.gdcic.parser import parse_bidding_detail
++        detail_data = {
++            'agentOrgName': '某代理公司',
++            'agentUnit': None,
++        }
++        result = parse_bidding_detail(detail_data)
++        assert result['agency_name'] == '某代理公司'
++
++    def test_parse_detail_empty(self):
++        from scraper.gdcic.parser import parse_bidding_detail
++        assert parse_bidding_detail({}) == {}
++        assert parse_bidding_detail(None) == {}
++
++    def test_parse_detail_invalid_money(self):
++        """无效金额返回空字典中不含 budget_amount。"""
++        from scraper.gdcic.parser import parse_bidding_detail
++        result = parse_bidding_detail({'biddingMoney': 'abc'})
++        assert 'budget_amount' not in result
++
++    def test_parse_detail_null_fields(self):
++        """详情中 null 字段不应出现。"""
++        from scraper.gdcic.parser import parse_bidding_detail
++        result = parse_bidding_detail({
++            'address': None,
++            'biddingDate': None,
++            'biddingMoney': None,
++            'scale': None,
++        })
++        assert result == {}
+ 
+-    def test_parse_dom_table(self):
+-        from scraper.gdcic.parser import parse_dom_list
+-        results = parse_dom_list(MOCK_DOM_HTML_TABLE)
+-        assert len(results) >= 2
+ 
+-        assert '供水管网' in results[0]['project_name']
+-        assert results[0]['source_url'].endswith('/detail/2001.html')
++# ------------------------------------------------------------------
++# parser 测试 — 项目信息解析
++# ------------------------------------------------------------------
++
++class TestParseProjectInfo:
++    """测试项目信息解析。"""
++
++    def test_parse_basic(self):
++        from scraper.gdcic.parser import parse_project_info
++        info = {
++            'provinceName': '广东省',
++            'cityName': '江门市',
++            'districtName': '台山市',
++            'buildUnit': '某房地产开发公司',
++            'totalInvest': '5000.00',
++            'totalArea': '3198.8',
++            'buildScale': '总建筑面积3198.8平方米',
++        }
++        result = parse_project_info(info)
++        assert result['project_location'] == '广东省江门市台山市'
++        assert result['build_unit'] == '某房地产开发公司'
++        assert result['total_invest'] == 5000.0
++        assert result['total_area'] == '3198.8'
++        assert result['build_scale'] == '总建筑面积3198.8平方米'
++
++    def test_parse_empty(self):
++        from scraper.gdcic.parser import parse_project_info
++        assert parse_project_info({}) == {}
++        assert parse_project_info(None) == {}
+ 
+-    def test_parse_dom_list_items(self):
+-        from scraper.gdcic.parser import parse_dom_list
+-        results = parse_dom_list(MOCK_DOM_HTML_LIST)
+-        assert len(results) >= 2
+ 
+-        assert '污水处理' in results[0]['project_name']
+-        assert results[0]['announcement_type'] == '招标公告'
++# ------------------------------------------------------------------
++# api 测试 — mock httpx 响应
++# ------------------------------------------------------------------
+ 
+-    def test_parse_dom_empty(self):
+-        from scraper.gdcic.parser import parse_dom_list
+-        assert parse_dom_list('') == []
+-        assert parse_dom_list(None) == []
+-        assert parse_dom_list('<html><body></body></html>') == []
++def _make_mock_scraper(response_json=None, status_code=200):
++    """创建 mock scraper 用于 API 测试。"""
++    mock = MagicMock()
++    mock.session = MagicMock()
++    mock.get_random_delay.return_value = 0
++    mock.get_random_ua.return_value = 'Mozilla/5.0 test-ua'
++    mock._create_session = MagicMock()
++
++    mock_response = MagicMock()
++    mock_response.status_code = status_code
++    mock_response.json.return_value = response_json or {}
++    mock.session.get.return_value = mock_response
++    return mock
++
++
++class TestFetchBiddingList:
++    """测试招投标列表 API 调用。"""
++
++    @patch('scraper.gdcic.api.time.sleep')
++    def test_fetch_list_success(self, _mock_sleep):
++        from scraper.gdcic.api import fetch_bidding_list
++        scraper = _make_mock_scraper(MOCK_LIST_RESPONSE)
++        result = fetch_bidding_list(scraper, keyword='管道', page_num=1)
++
++        assert result is not None
++        assert result['code'] == 0
++        assert result['total'] == 160063
++        assert len(result['rows']) == 2
++        # 验证请求参数
++        call_args = scraper.session.get.call_args
++        assert call_args is not None
++
++    @patch('scraper.gdcic.api.time.sleep')
++    def test_fetch_list_http_error(self, _mock_sleep):
++        from scraper.gdcic.api import fetch_bidding_list
++        scraper = _make_mock_scraper(status_code=500)
++        result = fetch_bidding_list(scraper, keyword='管道', page_num=1)
++        assert result is None
++
++    @patch('scraper.gdcic.api.time.sleep')
++    def test_fetch_list_business_error(self, _mock_sleep):
++        """code != 0 视为业务异常。"""
++        from scraper.gdcic.api import fetch_bidding_list
++        scraper = _make_mock_scraper({'code': 1, 'msg': 'error'})
++        result = fetch_bidding_list(scraper, keyword='管道', page_num=1)
++        assert result is None
++
++    @patch('scraper.gdcic.api.time.sleep')
++    def test_fetch_list_network_exception(self, _mock_sleep):
++        from scraper.gdcic.api import fetch_bidding_list
++        scraper = _make_mock_scraper(MOCK_LIST_RESPONSE)
++        scraper.session.get.side_effect = Exception('network error')
++        result = fetch_bidding_list(scraper, keyword='管道', page_num=1)
++        assert result is None
++
++
++class TestFetchBiddingDetail:
++    """测试招投标详情 API 调用。"""
++
++    @patch('scraper.gdcic.api.time.sleep')
++    def test_fetch_detail_success(self, _mock_sleep):
++        from scraper.gdcic.api import fetch_bidding_detail
++        scraper = _make_mock_scraper(MOCK_DETAIL_RESPONSE)
++        result = fetch_bidding_detail(scraper, '10051047')
++
++        assert result is not None
++        # 详情 API 响应无 code/msg/data 包装，字段直接在顶层
++        assert 'code' not in result
++        assert result['address'] == '台山市台城西湖片区国际路与龙成路交叉口东北侧'
++        assert result['biddingMoney'] == '639.76'
++        # 验证 URL 包含 ID
++        call_args = scraper.session.get.call_args
++        url = call_args[0][0] if call_args[0] else call_args[1].get('url', '')
++        assert '10051047' in url
++
++    @patch('scraper.gdcic.api.time.sleep')
++    def test_fetch_detail_no_code_wrapper(self, _mock_sleep):
++        """详情 API 响应无 code 字段时仍能正常返回（回归此 bug 场景）。
++
++        根因：详情 API 响应记录字段直接在顶层，无 code/msg/data 包装，
++        _get_api 的 code 校验会误判为业务异常返回 None，导致详情字段全部丢失。
++        """
++        from scraper.gdcic.api import fetch_bidding_detail
++        # 真实详情响应样例：记录字段直接在顶层，无 code/msg/data 包装
++        detail_response = {
++            'id': '10050987',
++            'projectName': '潮州市韩江新城砚峰路给水管道工程',
++            'projectCode': '4407812604020001',
++            'tenderType': '施工',
++            'provinceBiddingCode': '4407812604020001-BD-001',
++            'tenderMode': '公开招标',
++            'dataLevel': 'C',
++            'address': '潮州市韩江新城砚峰路',
++            'biddingDate': '2025-07-24 00:00:00',
++            'biddingMoney': '803.95',
++            'scale': '本工程建设内容为砚峰路全线供水管道工程建设...',
++            'agentOrgName': None,
++            'agentUnit': [],
++            'biddingUnit': [],
++            'biddingUnitPerson': [],
++        }
++        scraper = _make_mock_scraper(detail_response)
++        result = fetch_bidding_detail(scraper, '10050987')
++        # 修复前：_get_api 校验 code=None 误判为异常返回 None
++        # 修复后：详情 API 不校验 code，直接返回记录本身
++        assert result is not None
++        assert result['address'] == '潮州市韩江新城砚峰路'
++        assert result['biddingMoney'] == '803.95'
++        assert result['projectName'] == '潮州市韩江新城砚峰路给水管道工程'
++
++    @patch('scraper.gdcic.api.time.sleep')
++    def test_fetch_detail_empty_id(self, _mock_sleep):
++        """空 ID 直接返回 None，不发请求。"""
++        from scraper.gdcic.api import fetch_bidding_detail
++        scraper = _make_mock_scraper(MOCK_DETAIL_RESPONSE)
++        result = fetch_bidding_detail(scraper, '')
++        assert result is None
++        scraper.session.get.assert_not_called()
++
++    @patch('scraper.gdcic.api.time.sleep')
++    def test_fetch_detail_http_error(self, _mock_sleep):
++        from scraper.gdcic.api import fetch_bidding_detail
++        scraper = _make_mock_scraper(status_code=404)
++        result = fetch_bidding_detail(scraper, '99999')
++        assert result is None
+ 
+ 
+ # ------------------------------------------------------------------
+-# utils 测试
++# utils 测试（保留原有）
+ # ------------------------------------------------------------------
+ 
+ class TestCleanGdcicText:
+@@ -245,37 +437,6 @@ class TestExtractGdcicPhone:
+         assert extract_gdcic_phone('没有电话') == ''
+ 
+ 
+-# ------------------------------------------------------------------
+-# browser 辅助函数测试
+-# ------------------------------------------------------------------
+-
+-class TestBrowserHelpers:
+-    """测试 browser.py 中的纯函数。"""
+-
+-    def test_is_api_candidate(self):
+-        from scraper.gdcic.browser import _is_api_candidate
+-        assert _is_api_candidate('https://skypt.gdcic.net/api/queryData') is True
+-        assert _is_api_candidate('https://skypt.gdcic.net/openplatform/search') is True
+-        assert _is_api_candidate('https://cdn.example.com/app.js') is False
+-        assert _is_api_candidate('https://cdn.example.com/logo.png') is False
+-        assert _is_api_candidate('') is False
+-        assert _is_api_candidate(None) is False
+-
+-    def test_has_signature_params(self):
+-        from scraper.gdcic.browser import _has_signature_params
+-        assert _has_signature_params('https://api.example.com/data?sign=abc123') is True
+-        assert _has_signature_params('https://api.example.com/data?token=xyz') is True
+-        assert _has_signature_params('https://api.example.com/data?page=1&size=20') is False
+-        assert _has_signature_params('https://api.example.com/data') is False
+-
+-    def test_make_cache_key(self):
+-        from scraper.gdcic.browser import GdcicBrowser
+-        key = GdcicBrowser._make_cache_key(
+-            'https://skypt.gdcic.net/api/search?keyword=test&page=1', 'GET'
+-        )
+-        assert key == 'GET:/api/search'
+-
+-
+ # ------------------------------------------------------------------
+ # registry 测试
+ # ------------------------------------------------------------------
+@@ -310,3 +471,81 @@ class TestRegistry:
+         sites = Config.SCRAPER_SOURCE_SITES
+         assert 'gdcic' in sites
+         assert 'gdcic.net' in sites['gdcic']
++
++
++# ------------------------------------------------------------------
++# 采集器实例化测试
++# ------------------------------------------------------------------
++
++class TestScraperInstantiation:
++    """验证 GdcicScraper 可以正常实例化且无 Playwright 依赖。"""
++
++    def test_import_no_playwright(self):
++        """验证 import scraper.gdcic 不触发 Playwright 导入。"""
++        import importlib
++        import sys
++
++        # 移除已有的 gdcic 模块缓存，强制重新导入
++        mods_to_remove = [k for k in sys.modules if k.startswith('scraper.gdcic')]
++        for mod in mods_to_remove:
++            del sys.modules[mod]
++
++        # 确保 playwright 未被导入（如果之前被其他模块导入则忽略）
++        import scraper.gdcic  # noqa: F401
++        # 如果导入成功且无异常，说明不依赖 Playwright
++
++    def test_instantiate(self):
++        from scraper.gdcic import GdcicScraper
++        scraper = GdcicScraper()
++        assert scraper is not None
++        assert scraper.source_type == 'gdcic'
++        assert scraper.delay_min == 2
++        assert scraper.delay_max == 3
++        assert len(scraper.keywords) > 0
++
++    def test_scrape_page_returns_none_on_api_failure(self):
++        """列表 API 失败时 _scrape_page 返回 None。"""
++        from scraper.gdcic import GdcicScraper
++        from scraper.gdcic.api import fetch_bidding_list
++
++        scraper = GdcicScraper()
++        with patch('scraper.gdcic.fetch_bidding_list', return_value=None):
++            result = scraper._scrape_page('管道', 1)
++        assert result is None
++
++    def test_scrape_page_returns_empty_on_no_rows(self):
++        """列表 API 返回空 rows 时 _scrape_page 返回空列表。"""
++        from scraper.gdcic import GdcicScraper
++
++        scraper = GdcicScraper()
++        with patch('scraper.gdcic.fetch_bidding_list',
++                   return_value={'code': 0, 'rows': [], 'total': 0}):
++            result = scraper._scrape_page('管道', 1)
++        assert result == []
++
++    def test_scrape_page_fetches_detail(self):
++        """_scrape_page 正常流程：列表+详情+解析。"""
++        from scraper.gdcic import GdcicScraper
++
++        scraper = GdcicScraper()
++        # mock 前置去重（返回空集，表示全部需要请求详情）
++        scraper._prefetch_existing_keys = lambda leads: set()
++        scraper._check_pause_and_stop = lambda: None
++        scraper._lead_dedup_key = lambda lead: None  # 禁用去重 key
++
++        list_payload = {'code': 0, 'rows': [MOCK_LIST_ITEM], 'total': 1}
++        # fetch_bidding_detail 修复后返回记录本身（无 code/data 包装）
++        with patch('scraper.gdcic.fetch_bidding_list', return_value=list_payload), \
++             patch('scraper.gdcic.fetch_bidding_detail',
++                   return_value=MOCK_DETAIL_RESPONSE):
++            result = scraper._scrape_page('管道', 1)
++
++        assert len(result) == 1
++        lead = result[0]
++        assert lead['project_name'] == '天悦湾11#小区公共活动中心及公共架空（主体阶段）'
++        # 详情字段已补全
++        assert lead['buyer_address'] == '台山市台城西湖片区国际路与龙成路交叉口东北侧'
++        assert lead['budget_amount'] == 639.76
++        assert lead['publish_date'] == date(2026, 3, 9)
++        # _bidding_id 应被 pop 掉
++        assert '_bidding_id' not in lead

@@ -20,6 +20,7 @@ build/
 dist/
 *.egg-info/
 *.egg
+hongtu.ico
 
 # ====================
 # SQLite 数据库文件（Flask instance 目录）

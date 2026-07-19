@@ -86,7 +86,10 @@ def setup_logging(app):
 
     # 日志目录（相对项目根目录）
     if not os.path.isabs(log_dir):
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         log_dir = os.path.join(base_dir, log_dir)
     os.makedirs(log_dir, exist_ok=True)
 

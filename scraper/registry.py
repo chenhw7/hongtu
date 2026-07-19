@@ -107,7 +107,7 @@ SCRAPER_REGISTRY = {
         'badge_class': 'badge-indigo',
         'include_in_all': True,
         'is_lead_source': True,
-        'source_site': 'https://www.gdcic.net/',
+        'source_site': 'https://skypt.gdcic.net/',
     },
     'ggzyjy_sc': {
         'label': '四川公共资源交易',

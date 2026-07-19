@@ -1,4 +1,5 @@
 import os
+import sys
 from flask import Flask
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
@@ -46,6 +47,10 @@ def _ensure_schema_upgrades(app):
 def create_app(config_class=None):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(config_class or Config)
+
+    # 打包环境：instance目录与exe同级
+    if getattr(sys, 'frozen', False):
+        app.instance_path = os.path.join(os.path.dirname(sys.executable), 'instance')
 
     # 初始化日志系统（尽早配置，便于后续初始化过程也能输出日志）
     setup_logging(app)

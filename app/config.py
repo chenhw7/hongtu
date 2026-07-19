@@ -1,4 +1,12 @@
 import os
+import sys
+
+
+def _get_base_dir():
+    """获取应用基础目录：打包后为exe所在目录，开发时为项目根目录"""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class Config:
@@ -33,7 +41,7 @@ class Config:
         'pipebiz': 'https://www.chinapipe.net/',
         'ggzyjy_zj': 'https://ggzy.zj.gov.cn/',
         'gzfcj': 'https://zfcj.gz.gov.cn/',
-        'gdcic': 'https://www.gdcic.net/',
+        'gdcic': 'https://skypt.gdcic.net/',
         'bjx': 'https://huanbao.bjx.com.cn/',
         'ggzyjy_sc': 'https://ggzyjy.sc.gov.cn/',
         'ggzyjy_js': 'http://jsggzy.jszwfw.gov.cn/',
@@ -71,6 +79,6 @@ class Config:
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
     # 日志配置
     LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
-    LOG_DIR = os.environ.get('LOG_DIR', 'logs')
+    LOG_DIR = os.environ.get('LOG_DIR') or os.path.join(_get_base_dir(), 'logs')
     LOG_RETENTION_DAYS = int(os.environ.get('LOG_RETENTION_DAYS', 14))
     SLOW_REQUEST_MS = int(os.environ.get('SLOW_REQUEST_MS', 1000))
