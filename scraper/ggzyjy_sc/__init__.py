@@ -23,8 +23,8 @@ class ScGgzyjyScraper(EpointBaseScraper):
     source_type = 'ggzyjy_sc'
     base_url = 'https://ggzyjy.sc.gov.cn'
     REGIONS = REGIONS
-    CATEGORY_NUM = '002001001'  # 工程建设 - 招标公告
-    TIME_FIELD = 'webdate'
+    CATEGORY_NUM = '001'  # 四川省公共服务平台（顶级分类，ES 索引实际数据挂载于此）
+    TIME_FIELD = 'infodatepx'  # 四川平台时间字段为 infodatepx（webdate 会导致 API 返回残缺响应）
 
     # 四川使用多个候选 Referer，每次请求随机选取，降低指纹特征
     REFERERS = [

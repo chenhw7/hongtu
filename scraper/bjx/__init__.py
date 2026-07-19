@@ -22,7 +22,7 @@ from bs4 import BeautifulSoup
 from scraper.base import BaseScraper, ScraperStopped
 from scraper.keywords import BJX_KEYWORDS_FINAL
 from scraper.bjx.browser import BjxBrowser
-from scraper.bjx.parser import parse_list_page, parse_detail_page
+from scraper.bjx.parser import parse_list_page
 from scraper.bjx.utils import (
     build_bjx_headers,
     is_waf_challenge_page,
@@ -93,9 +93,10 @@ class BjxScraper(BaseScraper):
 
         try:
             # 2. 启动 Playwright 浏览器并获取 Cookie
-            headless = True
+            # 阿里云 WAF 能检测 headless 浏览器，必须用有界面模式
+            headless = False
             if self.app:
-                headless = self.app.config.get('BJX_HEADLESS', True)
+                headless = self.app.config.get('BJX_HEADLESS', False)
             self.browser = BjxBrowser(headless=headless)
             self.browser.start()
             self._cookies_str = self.browser.extract_cookies()
@@ -294,6 +295,9 @@ class BjxScraper(BaseScraper):
     def _scrape_page(self, keyword, page):
         """采集单页搜索结果。
 
+        策略：Playwright 优先（阿里云 WAF 完全拦截 httpx，Cookie 无效）。
+        仅采集列表页数据，不加载详情页（提速，列表页已含标题/日期/链接）。
+
         Args:
             keyword: 搜索关键词
             page: 页码
@@ -304,68 +308,42 @@ class BjxScraper(BaseScraper):
         # 检查 Cookie 是否需要刷新
         self._refresh_cookies_if_needed()
 
-        # 1. 获取列表页 HTML（httpx + Cookie）
-        # 优先尝试招投标栏目搜索
-        list_url = f'https://news.bjx.com.cn/zb/list.html?kw={keyword}&page={page}'
-        html = self._http_get(list_url)
+        html = None
 
-        # 如果招投标栏目无结果，尝试环保频道
-        if not html or not self._has_results(html):
-            list_url = f'https://huanbao.bjx.com.cn/news/list.html?kw={keyword}&page={page}'
-            html = self._http_get(list_url)
+        # 策略 1：Playwright 直接渲染搜索页（WAF 会自动通过）
+        if self.browser:
+            html = self.browser.search_keyword(
+                keyword, page_num=page,
+                stop_check=self._check_pause_and_stop,
+            )
 
+        # 策略 2：httpx 降级（少数情况 WAF 可能放行）
         if not html:
-            # httpx 失败时降级到 Playwright 全程渲染
-            logger.info('[bjx] httpx 请求失败，降级到 Playwright 渲染')
-            if self.browser:
-                html = self.browser.search_keyword(keyword, page_num=page)
+            list_url = f'https://news.bjx.com.cn/zb/list.html?kw={keyword}&page={page}'
+            html = self._http_get(list_url)
+            if not html or not self._has_results(html):
+                list_url = f'https://huanbao.bjx.com.cn/news/list.html?kw={keyword}&page={page}'
+                html = self._http_get(list_url)
 
         if not html:
             return None
 
-        # 2. 解析列表页
+        # 解析列表页
         leads = parse_list_page(html, self.base_url)
         if not leads:
             return []
 
-        # 3. 请求详情页（对每条线索）
+        # 进程内去重
+        unique_leads = []
         for lead in leads:
-            detail_url = lead.get('source_url')
-            if not detail_url:
-                continue
-
-            # 去重检查：进程内缓存
             dedup_key = self._lead_dedup_key(lead)
             if dedup_key and dedup_key in self._seen_keys:
                 continue
-
-            try:
-                self._check_pause_and_stop()
-
-                detail_html = self._http_get(detail_url)
-                if not detail_html and self.browser:
-                    # 降级到 Playwright
-                    detail_html = self.browser.load_page(detail_url)
-
-                if detail_html:
-                    detail_data = parse_detail_page(detail_html, self.base_url)
-                    # 合并详情字段到列表页 lead
-                    for key, value in detail_data.items():
-                        if key == 'attachments':
-                            lead['attachments'] = value
-                        elif key not in lead or not lead[key]:
-                            lead[key] = value
-                    # 保存原始 HTML 快照
-                    lead['_raw_html'] = detail_html
-            except ScraperStopped:
-                raise
-            except Exception as e:
-                logger.warning('[bjx] 详情页解析失败: %s - %s', detail_url, e)
-
             if dedup_key:
                 self._seen_keys.add(dedup_key)
+            unique_leads.append(lead)
 
-        return leads
+        return unique_leads
 
     @staticmethod
     def _has_results(html):

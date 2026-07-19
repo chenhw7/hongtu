@@ -85,7 +85,12 @@ class FdtzScraper(BaseScraper):
             from scraper.playwright_utils import extract_cookies_for_domain
 
             logger.info('[fdtz] 首次初始化，使用 Playwright 获取 JSL Cookie...')
-            cookies_str = extract_cookies_for_domain(self.base_url, wait_seconds=5)
+            # 直接访问 SPA 入口，触发完整 JSL 挑战流程
+            spa_url = f'{self.base_url}/tzxmspweb/'
+            cookies_str = extract_cookies_for_domain(
+                spa_url, wait_seconds=5,
+                wait_for_cookie=['__jsl_clearance_s', '__jsl_clearance'], max_wait=20,
+            )
             self._api = FdtzApi(cookies_str=cookies_str)
         return self._api
 

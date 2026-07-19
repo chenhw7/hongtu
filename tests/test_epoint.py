@@ -281,8 +281,8 @@ class TestScGgzyjyScraper(unittest.TestCase):
         scraper = ScGgzyjyScraper()
         self.assertEqual(scraper.source_type, 'ggzyjy_sc')
         self.assertEqual(scraper.base_url, 'https://ggzyjy.sc.gov.cn')
-        self.assertEqual(scraper.CATEGORY_NUM, '002001001')
-        self.assertEqual(scraper.TIME_FIELD, 'webdate')
+        self.assertEqual(scraper.CATEGORY_NUM, '001')
+        self.assertEqual(scraper.TIME_FIELD, 'infodatepx')
         self.assertEqual(len(scraper.REGIONS), 21)
 
     def test_inherits_from_epoint_base(self):

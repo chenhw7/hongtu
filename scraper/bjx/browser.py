@@ -24,6 +24,14 @@ _MAIN_SITE_URL = 'https://www.bjx.com.cn/'
 # Playwright 页面加载超时（毫秒）
 _PAGE_TIMEOUT = 30000
 
+# 反检测 JS：隐藏 headless 浏览器特征，绕过阿里云 WAF 检测
+_STEALTH_JS = """
+Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+Object.defineProperty(navigator, 'languages', {get: () => ['zh-CN', 'zh', 'en']});
+window.chrome = {runtime: {}};
+"""
+
 
 class BjxBrowser:
     """北极星环保网浏览器操作封装。
@@ -54,16 +62,24 @@ class BjxBrowser:
             )
 
         self._playwright = sync_playwright().start()
-        self.browser = self._playwright.chromium.launch(headless=self.headless)
+        self.browser = self._playwright.chromium.launch(
+            headless=self.headless,
+            args=[
+                '--disable-blink-features=AutomationControlled',
+                '--no-sandbox',
+            ],
+        )
         self.context = self.browser.new_context(
             user_agent=(
                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
                 'AppleWebKit/537.36 (KHTML, like Gecko) '
-                'Chrome/120.0.0.0 Safari/537.36'
+                'Chrome/126.0.0.0 Safari/537.36'
             ),
             locale='zh-CN',
             viewport={'width': 1280, 'height': 800},
         )
+        # 注入反检测脚本（每个页面加载前执行）
+        self.context.add_init_script(_STEALTH_JS)
         self.page = self.context.new_page()
 
         # 先访问主站（无 WAF），建立基础 Cookie
@@ -78,9 +94,12 @@ class BjxBrowser:
         # 再访问环保频道首页，等待 JS Challenge 完成
         logger.info('[bjx] 访问环保频道首页...')
         try:
-            self.page.goto(_ENV_CHANNEL_URL, wait_until='networkidle', timeout=_PAGE_TIMEOUT)
-            # 额外等待 JS 执行（WAF Challenge 通常需要几秒）
-            time.sleep(random.uniform(4, 6))
+            self.page.goto(_ENV_CHANNEL_URL, wait_until='domcontentloaded', timeout=_PAGE_TIMEOUT)
+            self._wait_for_waf_resolve(timeout=20)
+            try:
+                self.page.wait_for_load_state('networkidle', timeout=10000)
+            except Exception:
+                pass
             logger.info('[bjx] 环保频道首页加载完成，WAF Challenge 已通过')
         except Exception as e:
             logger.warning('[bjx] 环保频道加载异常（继续尝试）: %s', e)
@@ -153,7 +172,9 @@ class BjxBrowser:
             return ''
 
     def load_page(self, url):
-        """使用 Playwright 加载指定 URL 并返回 HTML（降级模式使用）。
+        """使用 Playwright 加载指定 URL 并返回 HTML。
+
+        自动检测阿里云 WAF JS Challenge 并等待其通过（最多 15 秒）。
 
         Args:
             url: 页面 URL
@@ -173,6 +194,9 @@ class BjxBrowser:
             logger.info('[bjx] 加载页面: %s', url)
             self.page.goto(url, wait_until='domcontentloaded', timeout=_PAGE_TIMEOUT)
 
+            # 等待 WAF JS Challenge 通过（阿里云 WAF 会自动执行 JS 并重定向）
+            self._wait_for_waf_resolve()
+
             # 等待内容加载
             try:
                 self.page.wait_for_load_state('networkidle', timeout=10000)
@@ -185,7 +209,158 @@ class BjxBrowser:
             logger.warning('[bjx] 页面加载失败: %s - %s', url, e)
             return None
 
-    def search_keyword(self, keyword, page_num=1):
+    def _wait_for_waf_resolve(self, timeout=15):
+        """等待 WAF JS Challenge 通过，并尝试自动完成滑块验证。
+
+        检测页面是否包含阿里云 WAF 特征（aliyun_waf_aa meta 标签），
+        如果包含则：
+        1. 先等待 JS Challenge 自动通过（部分场景无需交互）
+        2. 若出现滑块验证码，尝试自动拖动完成
+
+        Args:
+            timeout: 最大等待秒数
+        """
+        try:
+            content = self.page.content()
+            if 'aliyun_waf_aa' not in content and 'aliyun_waf_bb' not in content:
+                return  # 非 WAF 页面，无需等待
+
+            logger.info('[bjx] 检测到 WAF Challenge，尝试通过...')
+
+            # 第 1 步：等待 3 秒，看 JS Challenge 是否自动通过
+            try:
+                self.page.wait_for_function(
+                    '() => !document.querySelector(\'meta[name="aliyun_waf_aa"]\')',
+                    timeout=3000,
+                )
+                logger.info('[bjx] WAF JS Challenge 已自动通过')
+                time.sleep(1)
+                return
+            except Exception:
+                pass  # JS Challenge 未自动通过，尝试滑块
+
+            # 第 2 步：尝试自动完成滑块验证
+            if self._try_solve_slider():
+                # 滑块完成后等待页面刷新
+                try:
+                    self.page.wait_for_function(
+                        '() => !document.querySelector(\'meta[name="aliyun_waf_aa"]\')',
+                        timeout=(timeout - 5) * 1000,
+                    )
+                    logger.info('[bjx] WAF 滑块验证已通过')
+                    time.sleep(1)
+                except Exception:
+                    logger.debug('[bjx] 滑块后 WAF 仍未通过')
+            else:
+                logger.warning('[bjx] WAF 滑块验证未能自动完成，请在浏览器窗口中手动拖动滑块')
+                # 给用户手动操作的时间
+                try:
+                    self.page.wait_for_function(
+                        '() => !document.querySelector(\'meta[name="aliyun_waf_aa"]\')',
+                        timeout=(timeout - 5) * 1000,
+                    )
+                    logger.info('[bjx] WAF 验证已通过（手动）')
+                    time.sleep(1)
+                except Exception:
+                    logger.debug('[bjx] WAF 等待超时，继续')
+        except Exception:
+            logger.debug('[bjx] WAF 处理异常，继续')
+
+    def _try_solve_slider(self):
+        """尝试自动完成阿里云 WAF 滑块验证。
+
+        查找滑块按钮并模拟人工拖动（加速→减速 + 随机偏移）。
+
+        Returns:
+            bool: True 表示找到并尝试了拖动，False 表示未找到滑块
+        """
+        import math
+
+        # 常见阿里云 WAF 滑块选择器
+        slider_selectors = [
+            '#aliyunCaptcha-sliding-slider',
+            '#nc_1_n1z',
+            '.nc-lang-cnt .btn_slide',
+            '.nc_wrapper .nc_scale .scale_text',
+            '#nc_1__scale_text',
+        ]
+
+        slider = None
+        for sel in slider_selectors:
+            try:
+                el = self.page.query_selector(sel)
+                if el and el.is_visible():
+                    slider = el
+                    logger.info('[bjx] 找到滑块元素: %s', sel)
+                    break
+            except Exception:
+                continue
+
+        if not slider:
+            return False
+
+        try:
+            # 获取滑块和轨道的位置信息
+            box = slider.bounding_box()
+            if not box:
+                return False
+
+            # 轨道宽度（从滑块起始位置到右侧边界）
+            # 尝试获取轨道元素宽度
+            track_width = 340  # 默认值
+            track_selectors = [
+                '#aliyunCaptcha-sliding-body',
+                '#nc_1_wrapper',
+                '.nc-lang-cnt',
+                '.nc_wrapper',
+            ]
+            for tsel in track_selectors:
+                try:
+                    track = self.page.query_selector(tsel)
+                    if track:
+                        tbox = track.bounding_box()
+                        if tbox:
+                            track_width = int(tbox['width']) - int(box['width']) - 10
+                            break
+                except Exception:
+                    continue
+
+            # 滑块中心坐标
+            sx = box['x'] + box['width'] / 2
+            sy = box['y'] + box['height'] / 2
+
+            logger.info('[bjx] 开始拖动滑块，轨道宽度: %dpx', track_width)
+
+            # 模拟人工拖动：先加速后减速 + 随机 Y 轴抨动
+            self.page.mouse.move(sx, sy)
+            time.sleep(random.uniform(0.1, 0.3))
+            self.page.mouse.down()
+            time.sleep(random.uniform(0.05, 0.15))
+
+            # 分多步拖动，模拟人类轨迹
+            total_steps = random.randint(25, 40)
+            for i in range(1, total_steps + 1):
+                # ease-out 曲线：开始快、结束慢
+                progress = 1 - math.pow(1 - i / total_steps, 2)
+                dx = track_width * progress
+                # Y 轴随机抨动（模拟人手不稳）
+                dy = random.uniform(-2, 2)
+                self.page.mouse.move(sx + dx, sy + dy)
+                time.sleep(random.uniform(0.005, 0.02))
+
+            # 最终微调（模拟人类对齐）
+            self.page.mouse.move(sx + track_width, sy + random.uniform(-1, 1))
+            time.sleep(random.uniform(0.05, 0.1))
+            self.page.mouse.up()
+
+            time.sleep(2)  # 等待服务器验证
+            return True
+
+        except Exception as e:
+            logger.debug('[bjx] 滑块拖动失败: %s', e)
+            return False
+
+    def search_keyword(self, keyword, page_num=1, stop_check=None):
         """搜索关键词并返回结果列表的 HTML。
 
         尝试以下路径（按优先级）：
@@ -196,6 +371,7 @@ class BjxBrowser:
         Args:
             keyword: 搜索关键词
             page_num: 页码（从 1 开始）
+            stop_check: 可选回调，每次 URL 尝试前调用（用于检查停止标志）
 
         Returns:
             str: 结果列表页 HTML，失败返回 None
@@ -212,6 +388,8 @@ class BjxBrowser:
         ]
 
         for url in search_urls:
+            if stop_check:
+                stop_check()
             html = self.load_page(url)
             if html and self._has_search_results(html):
                 logger.info('[bjx] 搜索成功: %s', keyword)
@@ -224,6 +402,8 @@ class BjxBrowser:
                 _ZB_CHANNEL_URL,
             ]
             for url in fallback_urls:
+                if stop_check:
+                    stop_check()
                 html = self.load_page(url)
                 if html and self._has_search_results(html):
                     logger.info('[bjx] 栏目降级成功: %s', url)

@@ -11,13 +11,17 @@ import time
 logger = logging.getLogger(__name__)
 
 
-def extract_cookies(url, wait_seconds=5, headless=True):
+def extract_cookies(url, wait_seconds=5, headless=True, wait_for_cookie=None, max_wait=20):
     """用 Playwright 加载页面并提取 Cookie。
 
     Args:
         url: 目标页面 URL（通常是目标站点首页）
-        wait_seconds: 页面加载后等待 JS 执行的时间（秒）
+        wait_seconds: 页面加载后初始等待时间（秒）
         headless: 是否使用无头模式（默认 True）
+        wait_for_cookie: 可选，等待指定名称的 Cookie 出现（如 '__jsl_clearance_s'），
+                         可传字符串或字符串列表（任一出现即停止），
+                         每隔 1 秒轮询一次，最多等待 max_wait 秒
+        max_wait: 等待指定 Cookie 出现的最大秒数（默认 20）
 
     Returns:
         dict: Cookie 字典 {name: value}，失败返回空字典
@@ -41,10 +45,32 @@ def extract_cookies(url, wait_seconds=5, headless=True):
             logger.info('[playwright] 加载页面: %s', url)
             page.goto(url, wait_until='networkidle', timeout=30000)
 
-            # 等待 JS 执行（CDN Challenge 通常需要几秒）
+            # 初始等待 JS 执行
             if wait_seconds > 0:
                 logger.info('[playwright] 等待 %d 秒让 JS 执行...', wait_seconds)
                 time.sleep(wait_seconds)
+
+            # 如需等待特定 Cookie（如 JSL clearance），轮询直到出现或超时
+            if wait_for_cookie:
+                # 归一化为列表
+                if isinstance(wait_for_cookie, str):
+                    _targets = [wait_for_cookie]
+                else:
+                    _targets = list(wait_for_cookie)
+
+                elapsed = 0
+                while elapsed < max_wait:
+                    current_cookies = {c['name']: c['value'] for c in context.cookies()}
+                    matched = [name for name in _targets if name in current_cookies]
+                    if matched:
+                        logger.info('[playwright] 目标 Cookie "%s" 已出现（等待 %d 秒）',
+                                    matched[0], elapsed)
+                        break
+                    time.sleep(1)
+                    elapsed += 1
+                else:
+                    logger.warning('[playwright] 等待 Cookie %s 超时（%d 秒）',
+                                   _targets, max_wait)
 
             # 提取所有 Cookie
             for cookie in context.cookies():
@@ -61,18 +87,22 @@ def extract_cookies(url, wait_seconds=5, headless=True):
     return cookies
 
 
-def extract_cookies_for_domain(domain_url, api_url=None, wait_seconds=5):
+def extract_cookies_for_domain(domain_url, api_url=None, wait_seconds=5,
+                               wait_for_cookie=None, max_wait=20):
     """为指定域名提取 Cookie，并格式化为 httpx 可用的 Cookie 字符串。
 
     Args:
         domain_url: 域名首页 URL（如 https://tzxm.gd.gov.cn）
         api_url: 可选的 API URL，用于验证 Cookie 是否有效
         wait_seconds: JS 等待时间
+        wait_for_cookie: 等待指定 Cookie 出现（如 '__jsl_clearance_s'）
+        max_wait: 等待指定 Cookie 的最大秒数
 
     Returns:
         str: Cookie 字符串（"name1=value1; name2=value2"），可直接用于 httpx headers
     """
-    cookies = extract_cookies(domain_url, wait_seconds=wait_seconds)
+    cookies = extract_cookies(domain_url, wait_seconds=wait_seconds,
+                              wait_for_cookie=wait_for_cookie, max_wait=max_wait)
     if not cookies:
         return ''
     return '; '.join(f'{k}={v}' for k, v in cookies.items())

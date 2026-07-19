@@ -182,9 +182,26 @@ class TestIsWafChallengePage:
     def test_waf_challenge_detected(self):
         from scraper.bjx.utils import is_waf_challenge_page
 
-        # WAF 特征
+        # 通用 WAF 特征
         waf_html = '<html><body><script>var arg1="abc123";setTimeout(function(){eval(...)},1000)</script></body></html>'
         assert is_waf_challenge_page(waf_html) is True
+
+    def test_aliyun_waf_detected(self):
+        """验证阿里云 WAF JS Challenge 页面被正确识别。"""
+        from scraper.bjx.utils import is_waf_challenge_page
+
+        # 阿里云 WAF meta 标签特征
+        aliyun_waf_html = (
+            '<!doctypehtml><meta charset="UTF-8">'
+            '<meta name="aliyun_waf_aa"content="ff926c7f07e45e2e487a29a6197d3460">'
+            '<meta name="aliyun_waf_bb"content="eade71455e2ad9c6d08b82bc7d98df8c">'
+            '<title></title><script>void 0===window.console&&...</script>'
+        )
+        assert is_waf_challenge_page(aliyun_waf_html) is True
+
+        # 阿里云 Captcha 滑块验证特征
+        captcha_html = '<html><body><div id="aliyunCaptcha-sliding-slider"></div><div class="nc-container"></div></body></html>'
+        assert is_waf_challenge_page(captcha_html) is True
 
     def test_normal_page(self):
         from scraper.bjx.utils import is_waf_challenge_page

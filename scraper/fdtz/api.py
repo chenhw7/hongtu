@@ -53,7 +53,12 @@ class FdtzApi:
         from scraper.playwright_utils import extract_cookies_for_domain
 
         logger.info('[fdtz] 使用 Playwright 刷新 JSL Cookie...')
-        cookies_str = extract_cookies_for_domain(_BASE_URL, wait_seconds=5)
+        # 访问 SPA 入口触发完整 JSL 挑战
+        spa_url = f'{_BASE_URL}/tzxmspweb/'
+        cookies_str = extract_cookies_for_domain(
+            spa_url, wait_seconds=5,
+            wait_for_cookie=['__jsl_clearance_s', '__jsl_clearance'], max_wait=20,
+        )
         if not cookies_str:
             logger.warning('[fdtz] Playwright 未能获取到 Cookie')
             return False
@@ -151,7 +156,14 @@ class FdtzApi:
                     return None
 
                 else:
-                    logger.warning('[fdtz] HTTP %d: %s', response.status_code, path)
+                    # 记录 500 响应体便于诊断
+                    body_preview = ''
+                    try:
+                        body_preview = response.text[:200]
+                    except Exception:
+                        pass
+                    logger.warning('[fdtz] HTTP %d: %s body=%s',
+                                   response.status_code, path, body_preview)
                     if attempt < max_retries:
                         time.sleep(random.uniform(2, 4))
                         continue

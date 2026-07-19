@@ -168,8 +168,9 @@ def build_bjx_headers(cookies_str=None, referer=None):
 def is_waf_challenge_page(html):
     """检测页面是否为 WAF JS Challenge 拦截页。
 
-    WAF 拦截时返回的页面通常包含 var arg1 和加密 JS 脚本，
-    而不是正常的 HTML 内容。
+    支持检测：
+    - 阿里云 WAF（aliyun_waf_aa/bb meta 标签、aliyunCaptcha 滑块验证）
+    - 通用 JS Challenge（var arg1 + setTimeout/eval、document.cookie 回传）
 
     Args:
         html: 页面 HTML 字符串
@@ -179,7 +180,12 @@ def is_waf_challenge_page(html):
     """
     if not html:
         return False
-    # WAF JS Challenge 特征
+    # 阿里云 WAF 特征（meta 标签 + 验证码容器）
+    if 'aliyun_waf_aa' in html or 'aliyun_waf_bb' in html:
+        return True
+    if 'aliyunCaptcha' in html and 'nc-container' in html:
+        return True
+    # 通用 WAF JS Challenge 特征
     if 'var arg1' in html and ('setTimeout' in html or 'eval' in html):
         return True
     # 部分 WAF 使用 document.cookie 回传
