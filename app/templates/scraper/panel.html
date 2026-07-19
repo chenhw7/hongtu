@@ -179,7 +179,7 @@
     <div class="table-wrap">
         <table>
             <thead><tr>
-                <th>ID</th><th>数据源</th><th>状态</th><th>数量</th><th>开始时间</th><th>结束时间</th><th>耗时(秒)</th><th>错误信息</th>
+                <th>ID</th><th>数据源</th><th>状态</th><th>数量</th><th>开始时间</th><th>结束时间</th><th>耗时(秒)</th><th>错误信息</th><th>操作</th>
             </tr></thead>
             <tbody id="task-tbody">
                 {% for task in recent_tasks %}
@@ -193,6 +193,7 @@
                     <td>
                         {% if task.status == '完成' %}<span class="badge badge-green">完成</span>
                         {% elif task.status == '失败' %}<span class="badge badge-red">失败</span>
+                        {% elif task.status == '已取消' %}<span class="badge badge-slate">已取消</span>
                         {% elif task.status == '运行中' %}<span class="badge badge-amber"><span class="spinner spinner-sm"></span> 运行中</span>
                         {% else %}<span class="badge badge-slate">{{ task.status }}</span>{% endif %}
                     </td>
@@ -207,9 +208,14 @@
                     <td class="text-xs text-danger cell-truncate" style="max-width:250px" title="{{ task.error_msg or '' }}">
                         {{ task.error_msg[:80] + '...' if task.error_msg and task.error_msg|length > 80 else task.error_msg or '' }}
                     </td>
+                    <td>
+                        {% if task.status == '运行中' %}
+                        <button class="btn btn-ghost btn-xs" style="color:var(--red)" onclick="cancelTask({{ task.id }})">取消</button>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="8" class="empty-row">暂无采集任务记录</td></tr>
+                <tr><td colspan="9" class="empty-row">暂无采集任务记录</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -285,6 +291,20 @@ function controlScraper(taskType, action) {
     .catch(function(err) { showAlert('请求失败: ' + err, 'danger'); });
 }
 
+function cancelTask(taskId) {
+    if (!confirm('确定要取消任务 #' + taskId + ' 吗？')) return;
+    fetch('{{ url_for("scraper.cancel_task", task_id=0) }}'.replace('/0/', '/' + taskId + '/'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        showAlert(data.message, data.success ? 'success' : 'danger');
+        if (data.success) refreshTasks();
+    })
+    .catch(function(err) { showAlert('请求失败: ' + err, 'danger'); });
+}
+
 function refreshTasks() {
     fetch('{{ url_for("scraper.history") }}?per_page=10')
     .then(function(r) { return r.json(); })
@@ -293,7 +313,7 @@ function refreshTasks() {
         var tbody = document.getElementById('task-tbody');
         var html = '';
         if (data.tasks.length === 0) {
-            html = '<tr><td colspan="8" class="empty-row">暂无采集任务记录</td></tr>';
+            html = '<tr><td colspan="9" class="empty-row">暂无采集任务记录</td></tr>';
         } else {
             data.tasks.forEach(function(t) {
                 var badgeClass = BADGE_MAP[t.task_type] || 'badge-slate';
@@ -301,11 +321,13 @@ function refreshTasks() {
                 var typeBadge = '<span class="badge ' + badgeClass + '">' + escapeHtml(typeLabel) + '</span>';
                 var statusBadge = t.status === '完成' ? '<span class="badge badge-green">完成</span>'
                     : t.status === '失败' ? '<span class="badge badge-red">失败</span>'
+                    : t.status === '已取消' ? '<span class="badge badge-slate">已取消</span>'
                     : t.status === '运行中' ? '<span class="badge badge-amber"><span class="spinner spinner-sm"></span> 运行中</span>'
                     : '<span class="badge badge-slate">' + escapeHtml(t.status) + '</span>';
                 var duration = t.duration !== null ? escapeHtml(String(t.duration)) : '-';
                 var errorMsg = t.error_msg ? (t.error_msg.length > 80 ? t.error_msg.substring(0, 80) + '...' : t.error_msg) : '';
-                html += '<tr><td class="cell-muted">' + escapeHtml(String(t.id)) + '</td><td>' + typeBadge + '</td><td>' + statusBadge + '</td><td>' + escapeHtml(String(t.result_count)) + '</td><td class="cell-muted">' + escapeHtml(t.started_at || '-') + '</td><td class="cell-muted">' + escapeHtml(t.finished_at || '-') + '</td><td>' + duration + '</td><td class="text-xs text-danger cell-truncate" style="max-width:250px">' + escapeHtml(errorMsg) + '</td></tr>';
+                var actionCell = t.status === '运行中' ? '<button class="btn btn-ghost btn-xs" style="color:var(--red)" onclick="cancelTask(' + t.id + ')">取消</button>' : '';
+                html += '<tr><td class="cell-muted">' + escapeHtml(String(t.id)) + '</td><td>' + typeBadge + '</td><td>' + statusBadge + '</td><td>' + escapeHtml(String(t.result_count)) + '</td><td class="cell-muted">' + escapeHtml(t.started_at || '-') + '</td><td class="cell-muted">' + escapeHtml(t.finished_at || '-') + '</td><td>' + duration + '</td><td class="text-xs text-danger cell-truncate" style="max-width:250px">' + escapeHtml(errorMsg) + '</td><td>' + actionCell + '</td></tr>';
             });
         }
         tbody.innerHTML = html;

@@ -259,6 +259,9 @@ def detail(id):
     """线索详情页"""
     lead = Lead.query.get_or_404(id)
 
+    # 记录来源列表页URL，用于返回时保持筛选/分页状态
+    back_url = request.args.get('back', '') or url_for('leads.index')
+
     # 格式化原始数据JSON
     raw_data_json = ''
     if lead.raw_data:
@@ -272,7 +275,8 @@ def detail(id):
                            lead=lead,
                            raw_data_json=raw_data_json,
                            today=date.today(),
-                           registry=SCRAPER_REGISTRY)
+                           registry=SCRAPER_REGISTRY,
+                           back_url=back_url)
 
 
 @leads.route('/<int:id>/snapshot')

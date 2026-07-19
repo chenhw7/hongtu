@@ -246,6 +246,23 @@ def stop():
     return jsonify({'success': True, 'message': f'正在停止: {", ".join(stopped)}', 'task_types': stopped})
 
 
+@scraper.route('/task/<int:task_id>/cancel', methods=['POST'])
+def cancel_task(task_id):
+    """取消卡住的采集任务（系统异常退出导致状态停留在'运行中'）"""
+    task = db.session.get(ScrapeTask, task_id)
+    if task is None:
+        return jsonify({'success': False, 'message': '任务不存在'}), 404
+    if task.status != '运行中':
+        return jsonify({'success': False, 'message': f'任务状态为「{task.status}」，无法取消'}), 400
+
+    task.status = '已取消'
+    task.finished_at = datetime.now()
+    task.error_msg = task.error_msg or '用户手动取消（系统异常退出）'
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': f'任务 #{task_id} 已取消'})
+
+
 @scraper.route('/task/<int:task_id>')
 def task_detail(task_id):
     """查看单个任务状态（AJAX返回JSON）"""

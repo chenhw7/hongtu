@@ -159,7 +159,7 @@
                                         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
                                     </svg>
                                 </button>
-                                <a href="{{ url_for('leads.detail', id=lead.id) }}" class="cell-link" title="{{ lead.project_name or '' }}">{{ lead.project_name or '—' }}</a>
+                                <a href="{{ url_for('leads.detail', id=lead.id, back=request.url) }}" class="cell-link" title="{{ lead.project_name or '' }}">{{ lead.project_name or '—' }}</a>
                                 {% if lead.announcement_type %}
                                 <div><span class="badge badge-slate text-xs">{{ lead.announcement_type }}</span></div>
                                 {% endif %}
@@ -197,7 +197,7 @@
                                 {% endif %}
                             </td>
                             <td class="cell-sticky-right cell-actions">
-                                <a href="{{ url_for('leads.detail', id=lead.id) }}" class="btn btn-ghost btn-xs">详情</a>
+                                <a href="{{ url_for('leads.detail', id=lead.id, back=request.url) }}" class="btn btn-ghost btn-xs">详情</a>
                                 <a href="{{ url_for('leads.edit', id=lead.id) }}" class="btn btn-ghost btn-xs">编辑</a>
                                 <form method="POST" action="{{ url_for('leads.delete', id=lead.id) }}" class="d-inline" onsubmit="return confirm('确认删除此线索？')">
                                     <button type="submit" class="btn btn-ghost btn-xs" style="color:var(--red)">删除</button>
