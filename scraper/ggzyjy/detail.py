@@ -45,7 +45,8 @@ _RICHTEXT_LABEL_MAP = {
 }
 
 
-def fetch_detail(scraper, notice_id, project_code, site_code, trading_type='A'):
+def fetch_detail(scraper, notice_id, project_code, site_code, trading_type='A',
+                 trading_process=''):
     """获取并解析粤公平详情页（GET JSON 接口 + richText HTML 解析）。
 
     Args:
@@ -53,7 +54,8 @@ def fetch_detail(scraper, notice_id, project_code, site_code, trading_type='A'):
         notice_id: 公告 ID
         project_code: 项目编码
         site_code: 地区编码
-        trading_type: 交易类型（"A"=工程建设, "D"=政府采购）
+        trading_type: 交易类型（"A"=工程建设, "D"=政府采购, "R"=其他）
+        trading_process: 交易环节 ID（搜索接口返回的 tradingProcess 字段，用作 nodeId）
 
     Returns:
         dict: 补充字段（联系人、电话、预算、截止日期、附件、原始 HTML 等），
@@ -62,12 +64,24 @@ def fetch_detail(scraper, notice_id, project_code, site_code, trading_type='A'):
     if not notice_id:
         return {}
 
+    # bizCode 为 noticeId 前 4 位（API 必需参数）
+    biz_code = notice_id[:4] if len(notice_id) >= 4 else ''
+    # nodeId 使用搜索接口返回的 tradingProcess
+    node_id = trading_process or ''
+
+    # 如果 tradingProcess 含字母（如 3C14），它实际上是 bizCode 而非 nodeId
+    # 纯数字的 tradingProcess（如 3111, 3822）可直接用作 nodeId
+    if node_id and not node_id.isdigit():
+        biz_code = node_id  # tradingProcess 就是 bizCode
+        node_id = _fetch_node_id(scraper, notice_id, project_code, site_code,
+                                 biz_code, trading_type)
+
     params = {
-        'nodeId': '',
+        'nodeId': node_id,
         'version': 'v3',
         'tradingType': trading_type,
         'noticeId': notice_id,
-        'bizCode': '',
+        'bizCode': biz_code,
         'projectCode': project_code,
         'siteCode': site_code,
     }
@@ -93,18 +107,36 @@ def fetch_detail(scraper, notice_id, project_code, site_code, trading_type='A'):
     # 1) 解析 tradingNoticeColumnModelList
     column_list = data.get('tradingNoticeColumnModelList') or []
     for column in column_list:
-        col_type = column.get('type', '')
-        col_data = column.get('data')
+        # API 返回 viewStyle 而非 type，数据在不同字段中
+        col_type = column.get('viewStyle') or column.get('type') or ''
 
-        if col_type == 'keyTable' and col_data:
-            _parse_key_table(col_data, detail)
-        elif col_type == 'richText' and col_data:
-            _parse_rich_text(col_data, detail)
+        if col_type == 'keyTable':
+            # 新版 API: multiKeyValueTableList (list of list of dict)
+            kv_list = column.get('multiKeyValueTableList')
+            if kv_list:
+                _parse_key_table(kv_list, detail)
+            else:
+                col_data = column.get('data')
+                if col_data:
+                    _parse_key_table(col_data, detail)
+        elif col_type == 'richText':
+            # 新版 API: richtext 字段
+            rt_data = column.get('richtext') or column.get('data')
+            if rt_data:
+                _parse_rich_text(rt_data, detail)
 
-    # 2) 提取附件列表
+        # 提取附件（可能在任意 column 中）
+        file_list = column.get('noticeFileBOList')
+        if file_list:
+            attachments = _extract_attachments(
+                {'noticeFileBOList': file_list}, notice_id, site_code)
+            if attachments:
+                detail.setdefault('attachments', []).extend(attachments)
+
+    # 2) 提取附件列表（兼容旧版顶层 noticeFileBOList）
     attachments = _extract_attachments(data, notice_id, site_code)
     if attachments:
-        detail['attachments'] = attachments
+        detail.setdefault('attachments', []).extend(attachments)
 
     # 3) 保存原始 JSON 文本作为快照（richText 内容更有参考价值）
     rich_text_html = _collect_richtext_html(column_list)
@@ -115,23 +147,68 @@ def fetch_detail(scraper, notice_id, project_code, site_code, trading_type='A'):
     return {k: v for k, v in detail.items() if v not in (None, '')}
 
 
+_NODELIST_URL = ('https://ygp.gdzwfw.gov.cn/ggzy-portal/center/apis/'
+                 'trading-notice/new/nodeList')
+
+
+def _fetch_node_id(scraper, notice_id, project_code, site_code, biz_code,
+                   trading_type):
+    """通过 nodeList API 获取真正的 nodeId。
+
+    当搜索接口返回的 tradingProcess 是 4 位 hex（即 bizCode）时，
+    需要额外请求 nodeList 接口获取交易环节 ID。
+
+    Returns:
+        str: nodeId，获取失败返回空字符串
+    """
+    params = {
+        'noticeId': notice_id,
+        'projectCode': project_code,
+        'siteCode': site_code,
+        'bizCode': biz_code,
+        'tradingType': trading_type,
+    }
+    response = scraper.fetch(_NODELIST_URL, params=params,
+                             extra_headers={'Accept': 'application/json'})
+    if response is None:
+        return ''
+    try:
+        payload = response.json()
+    except ValueError:
+        return ''
+    if payload.get('errcode') != 0:
+        return ''
+    nodes = payload.get('data') or []
+    # 优先找有数据的节点（dataCount > 0 且 noticeId 匹配）
+    for node in nodes:
+        if (node.get('noticeId') == notice_id and node.get('nodeId')):
+            return str(node['nodeId'])
+    # 回退：取第一个 dataCount > 0 的节点
+    for node in nodes:
+        if node.get('dataCount', 0) > 0 and node.get('nodeId'):
+            return str(node['nodeId'])
+    return ''
+
 def _parse_key_table(key_table_data, detail):
     """解析 keyTable 类型的结构化键值对数据。
 
+    支持两种格式：
+    - 新版 API: multiKeyValueTableList = [[{code, key, value}, ...], ...]
+    - 旧版 API: data = [{key/fieldName, value/fieldValue}, ...] 或 dict
+
     Args:
-        key_table_data: keyTable 的 data 字段（list[dict] 或 dict）
+        key_table_data: keyTable 的数据字段
         detail: 写入目标 dict
     """
     if isinstance(key_table_data, list):
-        for row in key_table_data:
-            if isinstance(row, dict):
-                key = (row.get('key') or row.get('fieldName') or '').strip()
-                value = (row.get('value') or row.get('fieldValue') or '').strip()
-                if key and value:
-                    mapped = _KEYTABLE_FIELD_MAP.get(key)
-                    if mapped and not mapped.startswith('_'):
-                        if not detail.get(mapped):
-                            detail[mapped] = value[:500]
+        for item in key_table_data:
+            # 新版嵌套列表: [[{...}, {...}], ...]
+            if isinstance(item, list):
+                for row in item:
+                    if isinstance(row, dict):
+                        _extract_kv_row(row, detail)
+            elif isinstance(item, dict):
+                _extract_kv_row(item, detail)
     elif isinstance(key_table_data, dict):
         for key, value in key_table_data.items():
             if key and value:
@@ -139,6 +216,25 @@ def _parse_key_table(key_table_data, detail):
                 if mapped and not mapped.startswith('_'):
                     if not detail.get(mapped):
                         detail[mapped] = str(value)[:500]
+
+
+def _extract_kv_row(row, detail):
+    """从单行键值对中提取字段。
+
+    新版 API 行格式: {code: 'TENDER_PROJECT_NAME', key: '招标项目名称', value: '...'}
+    旧版 API 行格式: {key: '...', value: '...'} 或 {fieldName: '...', fieldValue: '...'}
+    """
+    # 优先用 code 字段匹配（新版 API）
+    code = (row.get('code') or '').strip()
+    key = (row.get('key') or row.get('fieldName') or '').strip()
+    value = (row.get('value') or row.get('fieldValue') or '').strip()
+    if not value:
+        return
+    # 先尝试 code 匹配，再尝试 key 匹配
+    mapped = _KEYTABLE_FIELD_MAP.get(code) or _KEYTABLE_FIELD_MAP.get(key)
+    if mapped and not mapped.startswith('_'):
+        if not detail.get(mapped):
+            detail[mapped] = value[:500]
 
 
 def _parse_rich_text(rich_text_data, detail):
@@ -251,6 +347,9 @@ def _collect_richtext_html(column_list):
     """收集所有 richText 列的 HTML 内容，拼接为完整的原始文本快照。"""
     parts = []
     for column in column_list:
-        if column.get('type') == 'richText' and column.get('data'):
-            parts.append(str(column['data']))
+        col_type = column.get('viewStyle') or column.get('type') or ''
+        if col_type == 'richText':
+            rt = column.get('richtext') or column.get('data')
+            if rt:
+                parts.append(str(rt))
     return '\n'.join(parts) if parts else None

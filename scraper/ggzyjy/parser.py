@@ -32,6 +32,7 @@ def parse_item(item):
     project_code = (item.get('projectCode') or '').strip()
     site_code = (item.get('siteCode') or '44').strip()
     trading_type = item.get('noticeSecondType', 'A')
+    trading_process = (item.get('tradingProcess') or '').strip()
 
     lead = {
         'project_name': (item.get('noticeTitle') or '').strip()[:500],
@@ -62,6 +63,7 @@ def parse_item(item):
     lead['_project_code'] = project_code
     lead['_site_code'] = site_code
     lead['_trading_type'] = trading_type
+    lead['_trading_process'] = trading_process
 
     # 过滤空值
     return {k: v for k, v in lead.items() if v not in (None, '')}

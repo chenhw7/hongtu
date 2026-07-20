@@ -137,75 +137,28 @@ def extract_bjx_phone(text):
     return ''
 
 
+# ----- 以下函数已废弃（主站通道无需 WAF 处理），保留空实现兼容旧引用 -----
+
 def build_bjx_headers(cookies_str=None, referer=None):
-    """构建 httpx 请求头（携带 WAF Cookie）。
-
-    Args:
-        cookies_str: Cookie 字符串（"name1=val1; name2=val2"），可选
-        referer: 来源页面 URL，可选
-
-    Returns:
-        dict: 请求头字典
-    """
-    headers = {
+    """已废弃：主站通道无需 Cookie。保留接口兼容。"""
+    return {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9',
         'Accept-Encoding': 'gzip, deflate',
         'User-Agent': (
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
             'AppleWebKit/537.36 (KHTML, like Gecko) '
-            'Chrome/120.0.0.0 Safari/537.36'
+            'Chrome/126.0.0.0 Safari/537.36'
         ),
         'Connection': 'keep-alive',
     }
-    if cookies_str:
-        headers['Cookie'] = cookies_str
-    if referer:
-        headers['Referer'] = referer
-    return headers
 
 
 def is_waf_challenge_page(html):
-    """检测页面是否为 WAF JS Challenge 拦截页。
-
-    支持检测：
-    - 阿里云 WAF（aliyun_waf_aa/bb meta 标签、aliyunCaptcha 滑块验证）
-    - 通用 JS Challenge（var arg1 + setTimeout/eval、document.cookie 回传）
-
-    Args:
-        html: 页面 HTML 字符串
-
-    Returns:
-        bool: True 表示被 WAF 拦截
-    """
-    if not html:
-        return False
-    # 阿里云 WAF 特征（meta 标签 + 验证码容器）
-    if 'aliyun_waf_aa' in html or 'aliyun_waf_bb' in html:
-        return True
-    if 'aliyunCaptcha' in html and 'nc-container' in html:
-        return True
-    # 通用 WAF JS Challenge 特征
-    if 'var arg1' in html and ('setTimeout' in html or 'eval' in html):
-        return True
-    # 部分 WAF 使用 document.cookie 回传
-    if 'document.cookie' in html and 'location.href' in html:
-        return True
+    """已废弃：主站通道无 WAF。保留接口兼容。"""
     return False
 
 
 def should_refresh_cookies(last_cookie_time, cookies_str):
-    """判断是否需要刷新 Cookie。
-
-    Args:
-        last_cookie_time: 上次获取 Cookie 的时间戳
-        cookies_str: 当前 Cookie 字符串
-
-    Returns:
-        bool: True 表示需要刷新
-    """
-    if not cookies_str:
-        return True
-    if time.time() - last_cookie_time > _MIN_COOKIE_REFRESH_INTERVAL:
-        return True
+    """已废弃：主站通道无需 Cookie 刷新。保留接口兼容。"""
     return False

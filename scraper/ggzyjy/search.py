@@ -37,6 +37,7 @@ def _build_search_body(keyword, page, site_code=None, trading_type_code=None,
         'siteCode': site_code or PROVINCE_SITE_CODE,
         'startTime': start_time.strftime('%Y%m%d000000'),
         'endTime': end_time.strftime('%Y%m%d235959'),
+        'type': 'trading-type',  # API 必需的类型参数
     }
     if keyword:
         body['keyword'] = keyword
@@ -136,10 +137,12 @@ def _process_page(scraper, payload):
         project_code = lead.pop('_project_code', '')
         site_code = lead.pop('_site_code', '')
         trading_type = lead.pop('_trading_type', 'A')
+        trading_process = lead.pop('_trading_process', '')
         if notice_id:
             from scraper.ggzyjy.detail import fetch_detail
             detail_data = fetch_detail(scraper, notice_id, project_code,
-                                       site_code, trading_type)
+                                       site_code, trading_type,
+                                       trading_process=trading_process)
             if detail_data:
                 lead.update(detail_data)
         detailed_leads.append(lead)
