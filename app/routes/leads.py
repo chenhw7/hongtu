@@ -171,7 +171,7 @@ def index():
     announcement_type = request.args.get('announcement_type', '', type=str)
     region = request.args.get('region', '', type=str)
     is_favorited = request.args.get('is_favorited')
-    sort = request.args.get('sort', 'publish_date', type=str)
+    sort = request.args.get('sort', 'created_at', type=str)
     order = request.args.get('order', 'desc', type=str)
 
     # 白名单排序字段，防止 SQL 注入

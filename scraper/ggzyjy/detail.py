@@ -16,6 +16,12 @@ _KEYTABLE_FIELD_MAP = {
     'TENDER_PROJECT_NAME': 'project_name',
     'BID_SECTION_NAME': '_bid_section',
     'PROJECT_CODE': 'bidding_number',
+    'PROJECT_OWNER': 'buyer_name',
+    'TENDER_AGENCY_NAME': 'agency_name',
+    'TENDER_AGENCY_PHONE': 'agency_phone',
+    'BUDGET_AMOUNT': '_budget_text',
+    'BID_OPEN_TIME': '_deadline_text',
+    'REGION_NAME': 'region',
 }
 
 # richText 中的中文标签 -> Lead 字段映射
@@ -26,10 +32,17 @@ _RICHTEXT_LABEL_MAP = {
     '招标人联系地址': 'buyer_address',
     '招标人地址': 'buyer_address',
     '采购人地址': 'buyer_address',
+    '项目地点': 'buyer_address',
+    '工程地点': 'buyer_address',
+    '项目所在地': 'buyer_address',
     '招标人联系人': 'contact_person',
     '招标人联系电话': 'phone',
     '联系人': 'contact_person',
     '联系电话': 'phone',
+    '采购人联系人': 'contact_person',
+    '采购人联系电话': 'phone',
+    '建设单位联系人': 'contact_person',
+    '建设单位联系电话': 'phone',
     '招标代理机构': 'agency_name',
     '代理机构': 'agency_name',
     '招标代理联系地址': '_agency_address',
@@ -37,11 +50,19 @@ _RICHTEXT_LABEL_MAP = {
     '代理机构联系电话': 'agency_phone',
     '最高投标限价': '_budget_text',
     '预算金额': '_budget_text',
+    '中标金额': '_budget_text',
+    '中标价': '_budget_text',
+    '成交金额': '_budget_text',
     '投标文件递交截止时间': '_deadline_text',
     '投标截止时间': '_deadline_text',
     '开标时间': '_deadline_text',
     '投资项目代码': 'bidding_number',
     '招标项目编号': 'bidding_number',
+    '中标候选人': '_winner_text',
+    '中标人': '_winner_text',
+    '中标单位': '_winner_text',
+    '成交供应商': '_winner_text',
+    '第一中标候选人': '_winner_text',
 }
 
 
@@ -143,6 +164,12 @@ def fetch_detail(scraper, notice_id, project_code, site_code, trading_type='A',
     if rich_text_html:
         detail['_raw_html'] = rich_text_html
 
+    # 4) 提取纯文本摘要存入 raw_data
+    if rich_text_html:
+        content_summary = _extract_content_summary(rich_text_html)
+        if content_summary:
+            detail.setdefault('_raw_data', {})['content_summary'] = content_summary
+
     # 过滤空值（不输出空字符串，避免覆盖列表页已有的字段）
     return {k: v for k, v in detail.items() if v not in (None, '')}
 
@@ -213,7 +240,18 @@ def _parse_key_table(key_table_data, detail):
         for key, value in key_table_data.items():
             if key and value:
                 mapped = _KEYTABLE_FIELD_MAP.get(key)
-                if mapped and not mapped.startswith('_'):
+                if not mapped:
+                    continue
+                if mapped.startswith('_'):
+                    if mapped == '_budget_text':
+                        budget = parse_budget(str(value))
+                        if budget is not None and not detail.get('budget_amount'):
+                            detail['budget_amount'] = budget
+                    elif mapped == '_deadline_text':
+                        deadline = _parse_deadline_text(str(value))
+                        if deadline and not detail.get('deadline'):
+                            detail['deadline'] = deadline
+                else:
                     if not detail.get(mapped):
                         detail[mapped] = str(value)[:500]
 
@@ -232,7 +270,19 @@ def _extract_kv_row(row, detail):
         return
     # 先尝试 code 匹配，再尝试 key 匹配
     mapped = _KEYTABLE_FIELD_MAP.get(code) or _KEYTABLE_FIELD_MAP.get(key)
-    if mapped and not mapped.startswith('_'):
+    if not mapped:
+        return
+    if mapped.startswith('_'):
+        # 特殊处理字段
+        if mapped == '_budget_text':
+            budget = parse_budget(value)
+            if budget is not None and not detail.get('budget_amount'):
+                detail['budget_amount'] = budget
+        elif mapped == '_deadline_text':
+            deadline = _parse_deadline_text(value)
+            if deadline and not detail.get('deadline'):
+                detail['deadline'] = deadline
+    else:
         if not detail.get(mapped):
             detail[mapped] = value[:500]
 
@@ -271,6 +321,10 @@ def _parse_rich_text(rich_text_data, detail):
             elif mapped == '_agency_address':
                 if not detail.get('agency_address'):
                     detail['_agency_address'] = value[:300]
+            elif mapped == '_winner_text':
+                # 中标人信息存入 raw_data（Lead 模型无 winner_name 字段）
+                if value:
+                    detail.setdefault('_raw_data', {})['winner_name'] = value[:200]
         else:
             if not detail.get(mapped):
                 detail[mapped] = value[:500]
@@ -341,6 +395,26 @@ def _extract_attachments(data, notice_id, site_code):
                 'url': file_url[:500],
             })
     return attachments
+
+
+def _extract_content_summary(html_text):
+    """从 richText HTML 中提取纯文本摘要（前 2000 字符）。
+
+    Args:
+        html_text: richText HTML 字符串
+
+    Returns:
+        str: 纯文本摘要，空内容返回 None
+    """
+    try:
+        soup = BeautifulSoup(html_text, 'html.parser')
+        text = soup.get_text(separator='\n', strip=True)
+        # 去除多余空行
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        content = '\n'.join(lines)
+        return content[:2000] if content else None
+    except Exception:
+        return None
 
 
 def _collect_richtext_html(column_list):

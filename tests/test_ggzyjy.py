@@ -49,13 +49,14 @@ class TestParseItem(unittest.TestCase):
             'noticeId': 'f970e58a-1234-5678',
             'noticeTitle': '广州市某燃气管道拆除迁改工程施工总承包',
             'noticeSecondType': 'A',
-            'noticeThirdType': '4',
+            'noticeThirdType': 'A02',
             'noticeThirdTypeDesc': '中标结果',
             'projectTypeName': '市政',
             'regionName': '广州市',
             'projectOwner': '广州市政园建设管理有限公司',
             'projectCode': 'E4401002701503104001',
             'publishDate': '20260716190934',
+            'tradingProcess': '3C31',
         }
 
         lead = parse_item(mock_item)
@@ -68,7 +69,12 @@ class TestParseItem(unittest.TestCase):
         self.assertEqual(lead['publish_date'], date(2026, 7, 16))
         self.assertEqual(lead['publish_time'], '19:09')
         self.assertIn('source_url', lead)
+        # 验证新 hash 路由 URL 格式
+        self.assertIn('/#/44/new/jygg/v3/A', lead['source_url'])
         self.assertIn('noticeId=f970e58a', lead['source_url'])
+        self.assertIn('bizCode=3C31', lead['source_url'])
+        self.assertIn('titleDetails=工程建设', lead['source_url'])
+        self.assertIn('classify=A02', lead['source_url'])
 
     def test_parse_item_empty_fields(self):
         """验证空字段不会出现在结果中。"""
@@ -89,6 +95,58 @@ class TestParseItem(unittest.TestCase):
         # 空字段应被过滤
         self.assertNotIn('region', lead)
         self.assertNotIn('buyer_name', lead)
+
+    def test_parse_item_url_with_trading_process(self):
+        """验证带 tradingProcess 的 URL 构建。"""
+        from scraper.ggzyjy.parser import parse_item
+
+        mock_item = {
+            'noticeId': '5c0fe74d-780b-4c69-81b5-28dd94fb2f0c-3C31',
+            'noticeTitle': '某工程施工招标',
+            'noticeSecondType': 'A',
+            'noticeThirdType': 'A01',
+            'noticeThirdTypeDesc': '招标公告',
+            'projectCode': 'E4401001123002549001',
+            'publishDate': '20260715090000',
+            'siteCode': '440900',
+            'tradingProcess': '3C31',
+            'regionName': '茂名市',
+            'projectOwner': '某建设单位',
+        }
+
+        lead = parse_item(mock_item)
+        self.assertIn('bizCode=3C31', lead['source_url'])
+        self.assertIn('siteCode=440900', lead['source_url'])
+        self.assertIn('publishDate=20260715090000', lead['source_url'])
+        self.assertIn('classify=A01', lead['source_url'])
+        self.assertIn('/#/44/new/jygg/v3/A', lead['source_url'])
+
+    def test_parse_item_url_government_purchase(self):
+        """验证政府采购类型的 URL 构建。"""
+        from scraper.ggzyjy.parser import parse_item
+
+        mock_item = {
+            'noticeId': 'abcd-1234-5678-9999',
+            'noticeTitle': '某政府采购项目',
+            'noticeSecondType': 'D',
+            'noticeThirdType': 'D01',
+            'noticeThirdTypeDesc': '采购公告',
+            'projectCode': 'D4401001234567890001',
+            'publishDate': '20260718100000',
+            'siteCode': '440100',
+            'tradingProcess': '',
+            'regionName': '广州市',
+            'projectOwner': '某政府单位',
+        }
+
+        lead = parse_item(mock_item)
+        # 路径包含 /v3/D
+        self.assertIn('/#/44/new/jygg/v3/D', lead['source_url'])
+        # titleDetails=政府采购
+        self.assertIn('titleDetails=政府采购', lead['source_url'])
+        # tradingProcess 为空，bizCode 应取 noticeId 前4位
+        self.assertIn('bizCode=abcd', lead['source_url'])
+        self.assertIn('classify=D01', lead['source_url'])
 
 
 class TestParseGgzyjyDate(unittest.TestCase):
