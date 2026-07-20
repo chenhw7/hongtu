@@ -17,3 +17,12 @@ dependencies = [
     "python-dotenv~=1.0",
     "openpyxl~=3.1",
 ]
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "live: 真实网络抓取烟雾测试，需 LIVE_SMOKE_TESTS=1",
+    "playwright_required: 需要安装 Playwright + Chromium",
+]
+addopts = "-q --strict-markers"

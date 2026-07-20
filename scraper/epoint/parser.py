@@ -40,8 +40,13 @@ def parse_record(record, scraper):
         'buyer_address': (record.get('infod') or '').strip()[:200],
     }
 
-    # 解析发布日期
-    publish_date, publish_time = parse_epoint_date(record.get('webdate'))
+    # 解析发布日期（浙江用 webdate，江苏/四川用 infodatepx）
+    date_field = 'webdate'
+    if scraper is not None:
+        tf = getattr(scraper, 'TIME_FIELD', None)
+        if isinstance(tf, str) and tf:
+            date_field = tf
+    publish_date, publish_time = parse_epoint_date(record.get(date_field))
     if publish_date:
         lead['publish_date'] = publish_date
     if publish_time:

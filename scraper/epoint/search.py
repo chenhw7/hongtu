@@ -62,7 +62,7 @@ def _build_search_body(keyword, page, scraper):
     return body
 
 
-def _post_search(scraper, body):
+def _post_search(scraper, body, api_url_override=None):
     """发送 ES 搜索 POST 请求，返回解析后的 JSON dict。
 
     使用 scraper.session.post() 直接发送，请求前加入限速延迟。
@@ -70,6 +70,7 @@ def _post_search(scraper, body):
     Args:
         scraper: EpointBaseScraper 实例
         body: POST 请求体 dict
+        api_url_override: 可选，覆盖默认的 API URL（用于子类自定义 API 路径/格式）
 
     Returns:
         dict or None: 接口返回的 JSON，请求失败返回 None
@@ -77,7 +78,7 @@ def _post_search(scraper, body):
     if scraper.session is None:
         scraper._create_session()
 
-    api_url = scraper.base_url.rstrip('/') + _API_PATH
+    api_url = api_url_override or scraper.base_url.rstrip('/') + _API_PATH
     try:
         time.sleep(scraper.get_random_delay())
         headers = {

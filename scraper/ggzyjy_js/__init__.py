@@ -23,6 +23,9 @@ class JsGgzyjyScraper(EpointBaseScraper):
     - CATEGORY_NUM = '003001001'（建设工程招标，前缀 003 而非 002）
     - TIME_FIELD = 'infodatepx'（而非 webdate）
     - base_url 使用 HTTP（HTTPS 证书无效）
+
+    2026-07 实测发现：江苏站 ES API 已升级为 keyword/pageNo 格式（同浙江），
+    不再接受 wd/pn/rn/cnum 格式。覆盖 _scrape_page 使用新格式。
     """
 
     source_type = 'ggzyjy_js'
@@ -31,3 +34,19 @@ class JsGgzyjyScraper(EpointBaseScraper):
     REGIONS = REGIONS
     CATEGORY_NUM = '003001001'  # 建设工程 - 招标公告
     TIME_FIELD = 'infodatepx'
+
+    # 江苏 ES API 使用 keyword/pageNo 格式（而非 wd/pn 格式）
+    _API_PATH = '/inteligentsearch/rest/esinteligentsearch/getFullTextDataNew'
+
+    def _scrape_page(self, keyword, page):
+        """江苏站 ES API 搜索（keyword/pageNo 格式）。"""
+        from scraper.epoint.search import _post_search, _process_page
+
+        body = {
+            'keyword': keyword or '',
+            'pageNo': page,
+            'pageSize': self.PAGE_SIZE,
+        }
+        api_url = self.base_url.rstrip('/') + self._API_PATH
+        payload = _post_search(self, body, api_url_override=api_url)
+        return _process_page(self, payload)
