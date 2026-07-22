@@ -46,6 +46,7 @@ class Config:
         'ggzyjy_sc': 'https://ggzyjy.sc.gov.cn/',
         'ggzyjy_js': 'http://jsggzy.jszwfw.gov.cn/',
         'qcc': 'https://openapi.qcc.com/',
+        'ggzy_national': 'https://www.ggzy.gov.cn/',
     }
     # 高德地图 Web服务API Key（个人开发者免费申请：https://lbs.amap.com/ -> 控制台 ->
     # 创建应用 -> 添加Key -> 服务平台选"Web服务"，不要选"Web端(JS API)"）。

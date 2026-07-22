@@ -136,6 +136,15 @@ SCRAPER_REGISTRY = {
         'is_lead_source': False,  # 产出企业画像而非招标线索
         'source_site': 'https://openapi.qcc.com/',
     },
+    'ggzy_national': {
+        'label': '全国公共资源交易',
+        'import_path': 'scraper.ggzy_national',
+        'class_name': 'GgzyNationalScraper',
+        'badge_class': 'badge-indigo',
+        'include_in_all': True,  # 一源覆盖全国，参与全量采集
+        'is_lead_source': True,
+        'source_site': 'https://www.ggzy.gov.cn/',
+    },
 }
 
 
